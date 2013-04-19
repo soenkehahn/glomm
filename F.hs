@@ -3,7 +3,7 @@
 module F where
 
 
-import Prelude (error, Bool(..), error)
+import Prelude (error, Bool(..))
 
 
 data Nat = Zero | Succ Nat
@@ -22,7 +22,6 @@ Succ a == Succ b = a == b
 _ == _ = False
 
 pred (Succ a) = a
-pred x = error "geht nicht"
 
 main :: Nat
 main = Succ (Succ (Succ Zero)) * Succ (Succ (Succ (Succ Zero)))

@@ -30,6 +30,9 @@ function patError() {
 
 function unpackCStringzh(x) {return x}
 
+/*
+ * testing
 var t = konstruktor("huhu")(konstruktor("bubu"))
-// ~ console.log(t)
+console.log(t)
 console.log(showKons(t))
+*/

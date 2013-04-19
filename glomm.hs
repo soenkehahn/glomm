@@ -75,7 +75,7 @@ altsToIfs (Acon (_, konsName) _ binds exp : r) =
     inner (i, (var, _)) = printf "var %s = scrutinee.argss[%i]\n" var i
 altsToIfs (Alit lit exp : r) = error $ show ("lit", lit, exp)
 altsToIfs (Adefault exp : []) = "{" ++ expToJS exp ++ "}"
-altsToIfs [] = "throw paterreuer"
+altsToIfs [] = "throw paterror"
 
 coreLitToJS :: CoreLit -> Expr
 coreLitToJS (Lint n) = (show n)
@@ -86,7 +86,7 @@ coreLitToJS (Lstring s) = "\"" ++ s ++ "\""
 
 rts :: IO (String, String)
 rts = do
-    prelude <- readFile "prelude.js"
-    rts <- readFile "rts.js"
+    prelude <- readFile "pre.js"
+    rts <- readFile "post.js"
     return (prelude, rts)
  

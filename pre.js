@@ -1,38 +1,60 @@
 
+function glommConstructor (name) {
+    var f = function (arg) {
+        f.glommConstructorArgs.push(arg);
+        return f;
+    };
+    f.glommConstructorName = name;
+    f.glommConstructorArgs = [];
+    return f;
+};
 
-function konstruktor (name) {
-    var f = function (arg1) {
-        var f = function (arg2) {
-            console.log("innermost")
-        }
-        f.namee = name
-        f.argss = [arg1]
-        return f
-    }
-    f.namee = name
-    f.argss = []
-    return f
-}
 
-function showKons(k) {
-    var r = k.namee
-    for (var i in k.argss) {
-        r = r + " @ " + showKons(k.argss[i])
+function glommShowConstructor(c) {
+    var r = c.glommConstructorName;
+    for (var i in c.glommConstructorArgs) {
+        r = r + " @ " + glommShowConstructor(c.glommConstructorArgs[i])
     }
     return r
+};
+
+function patError (msg) {
+    throw ("Non-exhaustive patterns in " + msg);
 }
 
-function patError() {
-    return function(msg) {
-        throw msg
-    }
-}
+function glommFromWhnf(o) {
+    var t = {};
+    t.isForced = true;
+    t.value = o;
+    return t;
+};
 
-function unpackCStringzh(x) {return x}
+function glommQuoted(quoted) {
+    var t = {};
+    t.isForced = false;
+    t.forceSome = function () {
+        return quoted();
+    };
+    return t;
+};
 
-/*
- * testing
-var t = konstruktor("huhu")(konstruktor("bubu"))
-console.log(t)
-console.log(showKons(t))
-*/
+function glommApply(f, x) {
+    var t = {};
+    t.isForced = false;
+    t.forceSome = function () {
+        if (! f.isForced) {
+            return glommApply(f.forceSome(), x);
+        } else {
+            return (f.value)(x);
+        };
+    };
+    return t;
+};
+
+function glommFullyForce(o) {
+    if (o.isForced) {
+        return o.value;
+    } else {
+        return glommFullyForce(o.forceSome());
+    };
+};

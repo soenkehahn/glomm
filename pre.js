@@ -12,7 +12,7 @@ function glommConstructorFunction (name) {
 };
 
 function glommShowConstructor(c) {
-    if (! c.isWhnf) {
+    if (typeof c.value == "undefined") {
         c = c.forceWhnf();
     };
     if (typeof c.value.glommConstructorName == "undefined") {
@@ -27,7 +27,6 @@ function glommShowConstructor(c) {
 
 function glommFromWhnf(o) {
     var t = {};
-    t.isWhnf = true;
     t.value = o;
     t.forceWhnf = function () {
         return t;
@@ -40,10 +39,9 @@ function glommFromWhnf(o) {
 
 function glommQuoted(quoted) {
     var t = {};
-    t.isWhnf = false;
     t.forceWhnf = function () {
         var result = quoted();
-        if (result.isWhnf) {
+        if (typeof result.value != "undefined") {
             return result;
         } else {
             return result.forceWhnf();
@@ -57,15 +55,13 @@ function glommQuoted(quoted) {
 
 function glommApply(f, x) {
     var t = {};
-    t.isWhnf = false;
     t.forceWhnf = function () {
-        if (! f.isWhnf) {
+        if (typeof f.value == "undefined") {
             f = f.forceWhnf();
         }
         if (f.value.isConstructed) {
             // constructor application
             f.value.glommConstructorArgs.push(x);
-            f.isWhnf = true;
             return f;
         } else {
             // beta reduction

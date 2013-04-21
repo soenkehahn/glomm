@@ -19,7 +19,7 @@ function glommShowConstructor(c) {
 };
 
 function patError (msg) {
-    throw ("Non-exhaustive patterns in " + msg);
+    throw ("Non-exhaustive patterns in " + glommFullyForce(msg));
 }
 
 function glommFromWhnf(o) {

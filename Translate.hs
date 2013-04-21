@@ -83,7 +83,7 @@ quote codeGen = do
 
 -- | Unquotes a value.
 forceWhnf :: Term -> JSA JSObject
-forceWhnf t = apply (cast $ object "glommForceWhnf") t
+forceWhnf t = t # invoke "forceWhnf" ()
 
 
 generateTerm :: Exp -> GenerateTerm
@@ -120,6 +120,7 @@ generateTerm (Core.Note x y) _ = error $ show ("note", x)
 generateTerm (Core.Case scrutineeJS y z alts) context = do
     scrutineeLazy <- generateTerm scrutineeJS context
     quote $ do
+        comment "force scrutinee"
         scrutinee <- forceWhnf scrutineeLazy
         altsToIfs scrutinee alts context
 generateTerm exp _ = error $ show ("exp", exp)

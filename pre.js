@@ -1,60 +1,81 @@
 
-function glommConstructor (name) {
-    var f = function (arg) {
-        f.glommConstructorArgs.push(arg);
-        return f;
+function glommConstructorFunction (name) {
+    var t = {};
+    t.isConstructed = true;
+    t.glommConstructorName = name;
+    t.glommConstructorArgs = [];
+    
+    t.toString = function () {
+        return ("Cons: " + name);
     };
-    f.glommConstructorName = name;
-    f.glommConstructorArgs = [];
-    return f;
+    return t;
 };
-
 
 function glommShowConstructor(c) {
-    var r = c.glommConstructorName;
-    for (var i in c.glommConstructorArgs) {
-        r = r + " @ " + glommShowConstructor(c.glommConstructorArgs[i])
-    }
-    return r
+    if (typeof c.value.glommConstructorName == "undefined") {
+        throw "name undefined: " + c.toString();
+    };
+    var r = c.value.glommConstructorName;
+    for (var i in c.value.glommConstructorArgs) {
+        r = r + " @ " + glommShowConstructor(glommForceWhnf(c.value.glommConstructorArgs[i]));
+    };
+    return r;
 };
-
-function patError (msg) {
-    throw ("Non-exhaustive patterns in " + glommFullyForce(msg));
-}
 
 function glommFromWhnf(o) {
     var t = {};
-    t.isForced = true;
+    t.isWhnf = true;
     t.value = o;
+    t.toString = function () {
+        return ("whnf: " + t.value);
+    };
     return t;
 };
 
 function glommQuoted(quoted) {
     var t = {};
-    t.isForced = false;
+    t.isWhnf = false;
     t.forceSome = function () {
         return quoted();
+    };
+    t.toString = function () {
+        return "thunk";
     };
     return t;
 };
 
 function glommApply(f, x) {
     var t = {};
-    t.isForced = false;
+    t.isWhnf = false;
     t.forceSome = function () {
-        if (! f.isForced) {
+        if (! f.isWhnf) {
             return glommApply(f.forceSome(), x);
         } else {
-            return (f.value)(x);
+            if (f.value.isConstructed) {
+                // constructor application
+                f.value.glommConstructorArgs.push(x);
+                f.isForced = true;
+                return f;
+            } else {
+                // beta reduction
+                return (f.value)(x);
+            };
         };
+    };
+    t.toString = function () {
+        return ("(" + f.toString() + " @ " + x.toString() + ")");
     };
     return t;
 };
 
-function glommFullyForce(o) {
-    if (o.isForced) {
-        return o.value;
-    } else {
-        return glommFullyForce(o.forceSome());
+function glommForceWhnf(o) {
+    var x = o;
+    while (! x.isWhnf) {
+        var x = x.forceSome();
     };
+    return x;
 };
+
+function patError (msg) {
+    throw ("Non-exhaustive patterns in " + glommForceWhnf(msg));
+}

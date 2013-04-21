@@ -1,4 +1,4 @@
 
 
 // entering the haskell code
-console.log(glommShowConstructor(glommFullyForce(sunroofMain)));
+console.log(glommShowConstructor(glommForceWhnf(sunroofMain)));

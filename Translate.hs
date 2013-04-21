@@ -1,5 +1,6 @@
 
 {-# language ScopedTypeVariables #-}
+{-# language OverloadedStrings #-}
 {-# language TupleSections #-}
 
 
@@ -7,7 +8,7 @@ module Translate where
 
 
 import Data.Boolean
-import Control.Monad (zipWithM)
+import Control.Monad (zipWithM, when)
 import Control.Applicative
 import Data.Default
 import Data.Foldable (forM_)
@@ -81,8 +82,8 @@ quote codeGen = do
     apply (cast $ object "glommQuoted") f
 
 -- | Unquotes a value.
-fullyForce :: Term -> JSA JSObject
-fullyForce t = apply (cast $ object "glommFullyForce") t
+forceWhnf :: Term -> JSA JSObject
+forceWhnf t = apply (cast $ object "glommForceWhnf") t
 
 
 generateTerm :: Exp -> GenerateTerm
@@ -106,7 +107,7 @@ generateTerm (Core.Lit (Literal coreLit _)) context = do
     comment ("literal " ++ show coreLit)
     coreLitToJS coreLit context
 generateTerm (Core.Dcon (t, name)) _ =
-    whnf (object ("glommConstructor(\"" ++ name ++ "\")"))
+    whnf (object ("glommConstructorFunction(\"" ++ name ++ "\")"))
 generateTerm (Core.Appt exp t) context = do
     comment ("appt " ++ show t)
     generateTerm exp context
@@ -119,15 +120,19 @@ generateTerm (Core.Note x y) _ = error $ show ("note", x)
 generateTerm (Core.Case scrutineeJS y z alts) context = do
     scrutineeLazy <- generateTerm scrutineeJS context
     quote $ do
-        scrutinee <- fullyForce scrutineeLazy
+        scrutinee <- forceWhnf scrutineeLazy
         altsToIfs scrutinee alts context
 generateTerm exp _ = error $ show ("exp", exp)
 
 altsToIfs :: JSObject -> [Alt] -> GenerateTerm
 altsToIfs scrutinee (Acon (_, consName) _ binds exp : r) context = do
-    ifB ((scrutinee JS.! attr "glommConstructorName") ==* string consName)
+    patternBinds :: [(String, Term)] <- forM (zip [0..] binds) $ \ (i, (var, _)) -> do
+        let args :: JSArray JSObject = (scrutinee JS.! attr "value" :: JSObject) JS.! (label "glommConstructorArgs")
+        return (var, args JS.! index (cast (object (show i))))
+    let contextWithPatternBinds = foldl (\ m (n, t) -> insert n t m) context patternBinds
+    ifB (((scrutinee JS.! attr "value" :: JSObject) JS.! attr "glommConstructorName") ==* string consName)
         -- then
-        (generateTerm exp context)
+        (generateTerm exp contextWithPatternBinds)
         -- else
         (altsToIfs scrutinee r context)
 -- ~ altsToIfs (Alit lit exp : r) = error $ show ("lit", lit, exp)

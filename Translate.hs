@@ -141,12 +141,13 @@ generateTerm (Core.Let vdefg exp) context = do
 generateTerm (Core.Cast exp y) context = error "cast" -- generateTerm exp context
 generateTerm (Core.Note x y) _ = error $ show ("note", x)
 -- ~ generateTerm (Core.External externalVar typ) = externalVar
-generateTerm (Core.Case scrutineeJS y z alts) context = do
+generateTerm (Core.Case scrutineeJS scrutineeBind typ alts) context = do
+    comment ("scr: " ++ show scrutineeBind)
     scrutineeLazy <- generateTerm scrutineeJS context
     quote $ do
         comment "force scrutinee"
         scrutinee <- forceWhnf scrutineeLazy
-        altsToIfs scrutinee alts context
+        altsToIfs scrutinee alts (insert (Nothing, fst scrutineeBind) scrutinee context)
 generateTerm exp _ = error $ show ("exp", exp)
 
 altsToIfs :: JSObject -> [Alt] -> GenerateTerm

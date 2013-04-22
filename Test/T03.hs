@@ -1,6 +1,6 @@
 {-# language NoImplicitPrelude #-}
 
-module F (main) where
+module Test.T03 (main) where
 
 
 -- ~ import GHC.Num

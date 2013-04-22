@@ -1,6 +1,6 @@
 {-# language NoImplicitPrelude #-}
 
-module B where
+module Test.T02 where
 
 main :: Bool
 main = not False

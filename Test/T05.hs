@@ -1,6 +1,6 @@
 {-# language NoImplicitPrelude #-}
 
-module F (main) where
+module Test.T05 (main) where
 
 
 -- ~ import GHC.Num
@@ -13,16 +13,13 @@ module F (main) where
 -- ~ fac n = n * fac (n - 1)
 
 
-main :: Bool
-main = isOdd (S (S (S Z)))
-
-isOdd :: Nat -> Bool
-isOdd Z = False
-isOdd (S a) = not (isOdd a)
-
-not False = True
-not True = False
-
+main :: Nat
+main = S (S (S (S Z))) * S (S (S Z))
 
 data Nat = Z | S Nat
-data Bool = True | False
+
+Z + b = b
+S a + b = a + S b
+
+Z * b = Z
+S a * b = b + (a * b)

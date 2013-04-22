@@ -15,9 +15,9 @@ main :: IO ()
 main = do
     files <-
         sort <$>
-        map ("tests" </>) <$>
+        map ("Test" </>) <$>
         filter ((== ".hs") . takeExtension) <$>
-        getDirectoryContents "tests"
+        getDirectoryContents "Test"
     forM_ files testFile
 
 testFile :: FilePath -> IO ()

@@ -4,23 +4,32 @@ function glommConstructorFunction (name) {
     t.isConstructed = true;
     t.glommConstructorName = name;
     t.glommConstructorArgs = [];
-    
+
     t.toString = function () {
-        return ("Cons: " + name);
+        var r = "Cons: " + name;
+        for (i in t.glommConstructorArgs) {
+            r = r + " @ " + t.glommConstructorArgs[i].toString();
+        };
+        return r;
     };
     return t;
 };
 
+// this is a bit magical atm. When we have a good idea how the entry point is typed, this can be implemented better.
 function glommShowConstructor(c) {
-    if (typeof c.value == "undefined") {
-        c = c.forceWhnf();
+    c.toWhnf();
+    if (typeof c.value == "number") {
+        return ("Prim: " + c.value);
+    };
+    if (typeof c.value == "string") {
+        return ("Prim: " + c.value);
     };
     if (typeof c.value.glommConstructorName == "undefined") {
-        throw "name undefined: " + c.toString();
+        throw "name undefined: " + c.value + " " + typeof(c.value);
     };
     var r = c.value.glommConstructorName;
     for (var i in c.value.glommConstructorArgs) {
-        r = r + " @ " + glommShowConstructor(c.value.glommConstructorArgs[i]);
+        r += " @ " + glommShowConstructor(c.value.glommConstructorArgs[i]);
     };
     return r;
 };
@@ -28,8 +37,8 @@ function glommShowConstructor(c) {
 function glommFromWhnf(o) {
     var t = {};
     t.value = o;
-    t.forceWhnf = function () {
-        return t;
+
+    t.toWhnf = function () {
     };
     t.toString = function () {
         return ("whnf: " + t.value);
@@ -39,13 +48,16 @@ function glommFromWhnf(o) {
 
 function glommQuoted(quoted) {
     var t = {};
-    t.forceWhnf = function () {
-        var result = quoted();
-        if (typeof result.value != "undefined") {
-            return result;
-        } else {
-            return result.forceWhnf();
+    t.toWhnf = function () {
+        if (typeof(t.value) != "undefined") {
+            return;
         };
+        var result = quoted();
+        result.toWhnf();
+        if (typeof(result.value.toWhnf) != "undefined") {
+            throw "nested";
+        };
+        t.value = result.value;
     };
     t.toString = function () {
         return "thunk";
@@ -55,17 +67,22 @@ function glommQuoted(quoted) {
 
 function glommApply(f, x) {
     var t = {};
-    t.forceWhnf = function () {
-        if (typeof f.value == "undefined") {
-            f = f.forceWhnf();
-        }
+    t.toWhnf = function () {
+        if (typeof(t.value) != "undefined") {
+            return;
+        };
+        f.toWhnf();
+        if (typeof(f.value.toWhnf) != "undefined") {
+            throw "nested";
+        };
         if (f.value.isConstructed) {
-            // constructor application
             f.value.glommConstructorArgs.push(x);
-            return f;
+            t.value = f.value;
         } else {
             // beta reduction
-            return ((f.value)(x)).forceWhnf();
+            var result = (f.value)(x)
+            result.toWhnf();
+            t.value = result.value;
         };
     };
     t.toString = function () {

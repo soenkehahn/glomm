@@ -33,8 +33,9 @@ testFile file = do
 sys :: String -> [String] -> IO String
 sys cmd options = do
     (ec, output, err) <- readProcessWithExitCode cmd options ""
-    putStrLn err
     when (ec /= ExitSuccess) $ do
         putStrLn output
+        putStrLn err
         error ("fail: " ++ show ec)
+    putStrLn err
     return output

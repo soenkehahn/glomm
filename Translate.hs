@@ -10,13 +10,15 @@
 module Translate where
 
 
-import Control.Exception (assert)
 import Control.Applicative
-import Data.List (intercalate)
+import Control.Exception (assert)
 import Control.Monad (zipWithM, when)
 import Data.Boolean
+import Data.Char
 import Data.Default
 import Data.Foldable
+import Data.List (intercalate)
+import Data.List (sortBy)
 import Data.Map as Map (Map, insert, lookup, keys, (!), fromList)
 import Data.Maybe
 import Data.Monoid
@@ -90,9 +92,9 @@ type Term = JSObject
 qnameToJSAttr :: QName -> String
 qnameToJSAttr (Nothing, v) =
     "l_" ++ v
-qnameToJSAttr q@(Just (M (_, parentModules, mod)), v) =
+qnameToJSAttr q@(Just (M (P package, parentModules, mod)), v) =
     "g_" ++
-    intercalate "_" (parentModules ++ mod : v : [])
+    intercalate "_" (package : parentModules ++ mod : v : [])
 
 -- | Creates a term for a term that is already in whnf.
 --   (More efficient than quote.)
@@ -106,8 +108,8 @@ quote codeGen = do
     apply (cast $ object "glommQuoted") f
 
 -- | Unquotes a value.
-forceWhnf :: Term -> JSA JSObject
-forceWhnf t = t # invoke "forceWhnf" ()
+toWhnf :: Term -> JSA ()
+toWhnf t = t # invoke "toWhnf" ()
 
 
 generateTerm :: Exp -> GenerateTerm
@@ -115,7 +117,7 @@ generateTerm (Lam (Vb (var, _)) exp) context = do
     fun <- function (\ a -> generateTerm exp (insert (Nothing, var) a context))
     whnf (cast fun)
 generateTerm (Lam (Tb (t, k)) exp) context = do
-    error "tblam"
+    throw "tblam"
     comment ("tblam: " ++ show (t, k))
     generateTerm exp context
 generateTerm (App f x) context = do
@@ -129,7 +131,7 @@ generateTerm (Core.Var qname) context =
         (Map.lookup qname context)
 generateTerm (Core.Lit (Literal coreLit _)) context = do
     comment ("literal " ++ show coreLit)
-    coreLitToJS coreLit context
+    coreLitToJS coreLit
 generateTerm (Core.Dcon (t, name)) _ =
     whnf (object ("glommConstructorFunction(\"" ++ name ++ "\")"))
 generateTerm (Core.Appt exp t) context = do
@@ -143,15 +145,25 @@ generateTerm (Core.Note x y) _ = error $ show ("note", x)
 -- ~ generateTerm (Core.External externalVar typ) = externalVar
 generateTerm (Core.Case scrutineeJS scrutineeBind typ alts) context = do
     comment ("scr: " ++ show scrutineeBind)
-    scrutineeLazy <- generateTerm scrutineeJS context
+    scrutinee <- generateTerm scrutineeJS context
     quote $ do
         comment "force scrutinee"
-        scrutinee <- forceWhnf scrutineeLazy
-        altsToIfs scrutinee alts (insert (Nothing, fst scrutineeBind) scrutinee context)
+        toWhnf scrutinee
+        altsToIfs scrutinee (sortAlts alts) (insert (Nothing, fst scrutineeBind) scrutinee context)
 generateTerm exp _ = error $ show ("exp", exp)
 
+sortAlts :: [Alt] -> [Alt]
+sortAlts = sortBy inner
+  where
+    inner (Adefault _) (Adefault _) = EQ
+    inner (Adefault _) x = GT
+    inner x (Adefault _) = LT
+    inner a b = EQ
+
 altsToIfs :: JSObject -> [Alt] -> GenerateTerm
-altsToIfs scrutinee (Acon (_, consName) _ binds exp : r) context = do
+altsToIfs scrutinee (Acon (_, consName) tbinds binds exp : r) context = do
+    comment ("tbinds: " ++ show tbinds)
+    comment ("vbinds: " ++ show binds)
     patternBinds :: [(QName, Term)] <- forM (zip [0..] binds) $ \ (i, (var, _)) -> do
         let args :: JSArray JSObject = (scrutinee JS.! attr "value" :: JSObject) JS.! (label "glommConstructorArgs")
         return ((Nothing, var), args JS.! index (cast (object (show i))))
@@ -161,24 +173,31 @@ altsToIfs scrutinee (Acon (_, consName) _ binds exp : r) context = do
         (generateTerm exp contextWithPatternBinds)
         -- else
         (altsToIfs scrutinee r context)
--- ~ altsToIfs (Alit lit exp : r) = error $ show ("lit", lit, exp)
--- ~ altsToIfs (Adefault exp : r) = "{" ++ generateTerm exp ++ "}"
--- ~ altsToIfs (Adefault exp : r) = error "ju"
+altsToIfs scrutinee (Alit (Literal lit _typ) exp : r) context = do
+    litTerm <- coreLitToJS lit
+    toWhnf litTerm
+    ifB ((scrutinee JS.! attr "value" :: JSObject) ==* (litTerm JS.! attr "value"))
+        -- then
+        (generateTerm exp context)
+        -- else
+        (altsToIfs scrutinee r context)
+altsToIfs scrutinee (Adefault exp : []) context = do
+    comment "Adefault"
+    generateTerm exp context
+altsToIfs scrutinee (Adefault exp : r) context = error "Adefault should always come last."
 altsToIfs _ [] _ = throw "pattern matching failure"
-altsToIfs scrutinee x context = error $ show ("altsToIfs", x)
 
-coreLitToJS :: CoreLit -> GenerateTerm
--- ~ coreLitToJS (Lint n) _ = quote $ object $ show n
-coreLitToJS (Lstring s) _ = whnf $ object ("\"" ++ s ++ "\"")
--- ~ coreLitToJS (Lchar c) = error "char"
+coreLitToJS :: CoreLit -> JSA Term
+coreLitToJS (Lint n) = whnf $ object $ show n
+coreLitToJS (Lstring s) = whnf $ object ("\"" ++ s ++ "\"")
+coreLitToJS (Lchar c) = whnf $ object $ show (ord c)
 -- ~ coreLitToJS (Lrational r) = printf "(%i, %i)" (numerator r) (denominator r)
-coreLitToJS x _ = error $ show ("coreLit", x)
+coreLitToJS x = error $ show ("coreLit", x)
 
 letContext :: Vdefg -> Context -> JSA Context
-letContext (Nonrec vdef) parentContext = do
-    error "let"
-    -- ~ x <- generateTerm rhs parentContext
-    -- ~ return $ insert name x parentContext
+letContext (Nonrec vdef) context =
+    comment "could be done more efficiently" >>
+    letContext (Core.Rec [vdef]) context
 letContext (Core.Rec vdefs) parentContext = do
     outerScope <- fixJS $ \ recScope -> do
         innerContext <- mkContextFromArray vdefs recScope
@@ -212,6 +231,7 @@ throw err = quote $ return $ object ("(function () {throw \"" ++ err ++ "\";})()
 
 rts :: IO (String, String)
 rts = do
+    ghcPrim <- readFile "ghcPrim.js"
     prelude <- readFile "pre.js"
     rts <- readFile "post.js"
-    return (prelude, rts)
+    return (prelude ++ ghcPrim, rts)

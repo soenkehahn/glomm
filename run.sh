@@ -11,4 +11,6 @@ set -o nounset
 # ~ nodejs F.js
 
 rm -rf _make
+mkdir _make
+cp baseCoreFiles/* _make -rv
 runghc -threaded runtests.hs

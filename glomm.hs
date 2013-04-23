@@ -1,6 +1,7 @@
 
 
 import Control.Arrow ((>>>))
+import Data.List
 import Development.Shake
 import Development.Shake.FilePath
 import System.Environment
@@ -25,19 +26,24 @@ main = shakeArgs shakeOptions{shakeFiles = "_make/", shakeProgress = progressSim
             "-S" :
             "-outputdir" : "_make" :
             "-i_make" :
+            "-hide-all-packages" :
+            "-package" : "base" :
             []
+        system' "rm" [replaceExtension hsFile ".s"]
         system' "mv" $
             (replaceExtension hsFile ".hcr") :
             coreFile :
             []
 
     "_make//*.hs.hcr.js" *> \ jsFile -> do
+        need ["pre.js", "ghcPrim.js", "post.js"]
         let coreFile = dropExtension jsFile
         hsImports <- readFileLines (dropExtension coreFile <.> "transitiveImports")
         let importCoreFiles = map (\ f -> "_make" </> f <.> ".hcr") hsImports
+            baseCoreFiles = map (\ f -> "_make" </> f <.> ".hcr") baseModules
         need (coreFile : importCoreFiles)
         liftIO $ putStrLn ("compiling " ++ show (coreFile : importCoreFiles))
-        liftIO $ compileFiles (Modules coreFile importCoreFiles) jsFile
+        liftIO $ compileFiles (Modules coreFile (importCoreFiles ++ baseCoreFiles)) jsFile
 
     "_make//*.hs.transitiveImports" *> \ importsFile -> do
         directImports <- readFileLines (replaceExtension importsFile ".directImports")
@@ -50,7 +56,9 @@ main = shakeArgs shakeOptions{shakeFiles = "_make/", shakeProgress = progressSim
             oFile = replaceExtension hsFile ".o"
         system' "ghc" $
             "-M" : "-dep-makefile" : ghcMakeFile :
-            "-include-package-deps" :
+            "-hide-all-packages" :
+            "-package" : "ghc-prim" :
+            "-package" : "base" :
             hsFile :
             []
         directImports <- parseImports oFile hsFile <$> readFile' ghcMakeFile
@@ -67,3 +75,10 @@ parseImports oFile hsFile =
     map (words >>>
          last >>>
          flip replaceExtension ".hs")
+
+baseModules :: [FilePath]
+baseModules =
+    "GHC/CString.hs" :
+    -- ~ "GHC/Classes.hs" :
+    -- ~ "GHC/Types.hs" :
+    []

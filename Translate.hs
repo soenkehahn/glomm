@@ -144,12 +144,10 @@ generateTerm (Core.Cast exp y) context = error "cast" -- generateTerm exp contex
 generateTerm (Core.Note x y) _ = error $ show ("note", x)
 -- ~ generateTerm (Core.External externalVar typ) = externalVar
 generateTerm (Core.Case scrutineeJS scrutineeBind typ alts) context = do
-    comment ("scr: " ++ show scrutineeBind)
     scrutinee <- generateTerm scrutineeJS context
-    quote $ do
-        comment "force scrutinee"
-        toWhnf scrutinee
-        altsToIfs scrutinee (sortAlts alts) (insert (Nothing, fst scrutineeBind) scrutinee context)
+    rhs <- function $ \ scrutineeInWhnf ->
+        altsToIfs scrutineeInWhnf (sortAlts alts) (insert (Nothing, fst scrutineeBind) scrutineeInWhnf context)
+    apply (cast $ object "glommCast") (scrutinee, rhs)
 generateTerm exp _ = error $ show ("exp", exp)
 
 sortAlts :: [Alt] -> [Alt]

@@ -1,4 +1,5 @@
 
+// Returns a constructed value (not a term)
 function glommConstructorFunction (name) {
     var t = {};
     t.isConstructed = true;
@@ -17,7 +18,7 @@ function glommConstructorFunction (name) {
 
 // this is a bit magical atm. When we have a good idea how the entry point is typed, this can be implemented better.
 function glommShowConstructor(c) {
-    c.toWhnf();
+    toWhnf(c);
     if (typeof c.value == "number") {
         return ("Prim: " + c.value);
     };
@@ -34,59 +35,81 @@ function glommShowConstructor(c) {
     return r;
 };
 
+function toWhnf(t) {
+    var c = 0;
+    while (typeof(t.value) == "undefined") {
+        c += 1;
+        if (c > 10000) {
+            // ~ throw "too many steps";
+        };
+        t.toWhnff();
+    };
+};
+
+// Returns a term that is in whnf.
 function glommFromWhnf(o) {
     var t = {};
     t.value = o;
 
-    t.toWhnf = function () {
-    };
     t.toString = function () {
         return ("whnf: " + t.value);
     };
     return t;
 };
 
+// Returns a term that is a thunk.
 function glommQuoted(quoted) {
-    var t = {};
-    t.toWhnf = function () {
-        if (typeof(t.value) != "undefined") {
-            return;
-        };
-        var result = quoted();
-        result.toWhnf();
-        if (typeof(result.value.toWhnf) != "undefined") {
-            throw "nested";
-        };
-        t.value = result.value;
-    };
-    t.toString = function () {
-        return "thunk";
+    var t = {
+        toWhnff: function () {
+            var result = quoted();
+            this.value = result.value;
+            this.toWhnff = result.toWhnff;
+        },
+        toString: function () {
+            return "thunk";
+        }
     };
     return t;
 };
 
+// Returns a term that is an application of two terms.
 function glommApply(f, x) {
     var t = {};
-    t.toWhnf = function () {
-        if (typeof(t.value) != "undefined") {
+    t.toWhnff = function () {
+        if (typeof(f.value) == "undefined") {
+            f.toWhnff();
             return;
-        };
-        f.toWhnf();
-        if (typeof(f.value.toWhnf) != "undefined") {
-            throw "nested";
-        };
-        if (f.value.isConstructed) {
-            f.value.glommConstructorArgs.push(x);
-            t.value = f.value;
         } else {
-            // beta reduction
-            var result = (f.value)(x)
-            result.toWhnf();
-            t.value = result.value;
+            if (f.value.isConstructed) {
+                f.value.glommConstructorArgs.push(x);
+                this.value = f.value;
+            } else {
+                // beta reduction
+                var result = (f.value)(x)
+                this.value = result.value;
+                this.toWhnff = result.toWhnff;
+            };
         };
     };
     t.toString = function () {
         return ("(" + f.toString() + " @ " + x.toString() + ")");
+    };
+    return t;
+};
+
+// Returns a term for a cast.
+// The rhs expects the scrutinee in whnf.
+function glommCast (scrutinee, rhsFun) {
+    var t = {};
+    t.toWhnff = function () {
+        if (typeof(scrutinee.value) == "undefined") {
+            scrutinee.toWhnff();
+            return;
+        } else {
+            var result = rhsFun(scrutinee);
+            this.value = result.value;
+            this.toWhnff = result.toWhnff;
+        };
     };
     return t;
 };

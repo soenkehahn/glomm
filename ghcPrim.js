@@ -91,3 +91,21 @@ f = function (a, b) {
 };
 // ==#
 var g_ghczmprim_GHC_Prim_zezezh = primFunction2(f);
+
+f = function (a, b) {
+    return toHsBool(a < b);
+};
+// ltWord#
+var g_ghczmprim_GHC_Prim_ltWordzh = primFunction2(f);
+
+f = function (a, b) {
+    return toHsBool(a > b);
+};
+// gtWord#
+var g_ghczmprim_GHC_Prim_gtWordzh = primFunction2(f);
+
+f = function (a, b) {
+    return toHsBool(a == b);
+};
+// eqWord#
+var g_ghczmprim_GHC_Prim_gtWordzh = primFunction2(f);

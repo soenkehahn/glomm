@@ -29,7 +29,7 @@ import Language.Core.Core as Core
 import Language.Core.ParseGlue
 import Language.Core.Parser
 import Language.Sunroof as JS
-import Prelude hiding (mapM, foldl)
+import Prelude hiding (mapM, foldl, elem)
 import System.Environment
 import Text.Printf
 import Text.Show.Pretty
@@ -40,6 +40,14 @@ data Modules a = Modules {
     imports :: [a]
   }
     deriving (Functor, Traversable, Foldable, Show)
+
+
+rts :: IO (String, String)
+rts = do
+    ghcPrim <- readFile "ghcPrim.js"
+    prelude <- readFile "pre.js"
+    rts <- readFile "post.js"
+    return (prelude ++ ghcPrim, rts)
 
 
 compileFiles :: Modules FilePath -> FilePath -> IO ()
@@ -108,6 +116,34 @@ quote codeGen = do
     apply (cast $ object "glommQuoted") f
 
 
+letContext :: Vdefg -> Context -> JSA Context
+letContext (Nonrec vdef) context =
+    comment "could be done more efficiently" >>
+    letContext (Core.Rec [vdef]) context
+letContext (Core.Rec vdefs) parentContext = do
+    outerScope <- fixJS $ \ recScope -> do
+        innerContext <- mkContextFromArray vdefs recScope
+        values <- forM vdefs $ \ (Vdef ((q, name), _, rhs)) -> do
+            comment ("letrec assignment to '" ++ name ++ "' ")
+            r <- generateTerm rhs innerContext
+            comment ("end " ++ name)
+            return r
+        scope <- new "Object" ()
+        forM_ (zip (map vdefName vdefs) values) $ \ (name, value) ->
+            scope # attr (qnameToJSAttr name) := value
+        return scope
+    mkContextFromArray vdefs outerScope
+  where
+    mkContextFromArray :: [Vdef] -> JSObject -> JSA Context
+    mkContextFromArray vdefs scope =
+        foldl (\ c (name, v) -> insert name v c) parentContext <$>
+        zipWithM (inner scope) [0..] vdefs
+    inner :: JSObject -> Integer -> Vdef -> JSA (QName, Term)
+    inner scope i vdef = do
+        t <- quote $ return (scope JS.! attr (qnameToJSAttr (vdefName vdef)))
+        return (vdefName vdef, t)
+
+
 generateTerm :: Exp -> GenerateTerm
 generateTerm (Lam (Vb (var, _)) exp) context = do
     fun <- function (\ a -> generateTerm exp (insert (Nothing, var) a context))
@@ -125,9 +161,9 @@ generateTerm (Core.Var qname) context =
         (comment ("var lookup error: " ++ show qname ++ "\n" ++ ppShow (keys context)) >> return (object (qnameToJSAttr qname)))
         (return)
         (Map.lookup qname context)
-generateTerm (Core.Lit (Literal coreLit _)) context = do
+generateTerm (Core.Lit (Literal coreLit typ)) context = do
     comment ("literal " ++ show coreLit)
-    coreLitToJS coreLit
+    coreLitToJS coreLit typ
 generateTerm (Core.Dcon (t, name)) _ =
     whnf (object ("glommConstructorFunction(\"" ++ name ++ "\")"))
 generateTerm (Core.Appt exp t) context = do
@@ -169,8 +205,8 @@ altsToIfs scrutinee (Acon (_, consName) tbinds binds exp : r) context = do
         (generateTerm exp contextWithPatternBinds)
         -- else
         (altsToIfs scrutinee r context)
-altsToIfs scrutinee (Alit (Literal lit _typ) exp : r) context = do
-    litTerm <- coreLitToJS lit
+altsToIfs scrutinee (Alit (Literal lit typ) exp : r) context = do
+    litTerm <- coreLitToJS lit typ
     ifB ((scrutinee JS.! attr "value" :: JSObject) ==* (litTerm JS.! attr "value"))
         -- then
         (generateTerm exp context)
@@ -183,53 +219,53 @@ altsToIfs scrutinee (Adefault exp : r) context = error "Adefault should always c
 altsToIfs _ [] _ = throw "pattern matching failure"
 
 -- | Returns a litaral as a Term in whnf.
-coreLitToJS :: CoreLit -> JSA Term
-coreLitToJS (Lint n) = whnf $ object $ show n
-coreLitToJS (Lstring s) = whnf $ object (show s)
-coreLitToJS (Lchar c) = whnf $ object $ show (ord c)
-coreLitToJS (Lrational r) = do
-    throw "rational literal"
-    -- ~ whnf $ object $ printf "(%i, %i)" (numerator r) (denominator r)
-coreLitToJS x = error $ show ("coreLit", x)
-
-letContext :: Vdefg -> Context -> JSA Context
-letContext (Nonrec vdef) context =
-    comment "could be done more efficiently" >>
-    letContext (Core.Rec [vdef]) context
-letContext (Core.Rec vdefs) parentContext = do
-    outerScope <- fixJS $ \ recScope -> do
-        innerContext <- mkContextFromArray vdefs recScope
-        values <- forM vdefs $ \ (Vdef ((q, name), _, rhs)) -> do
-            comment ("letrec assignment to '" ++ name ++ "' ")
-            r <- generateTerm rhs innerContext
-            comment ("end " ++ name)
-            return r
-        scope <- new "Object" ()
-        forM_ (zip (map vdefName vdefs) values) $ \ (name, value) ->
-            scope # attr (qnameToJSAttr name) := value
-        return scope
-    mkContextFromArray vdefs outerScope
+coreLitToJS :: CoreLit -> Ty -> JSA Term
+coreLitToJS (Lint n) typ | show typ `elem` [
+        "ghczmprim:GHCziPrim.Intzh",
+        "ghczmprim:GHCziPrim.Wordzh",
+        "ghczmprim:GHCziPrim.Charzh"]
+    = whnf $ object $ show n
+coreLitToJS (Lint n) typ | show typ == "integerzmgmp:GHCziIntegerziType.Integer"
+    = do
+        comment "newInt"
+        integerToJSTerm n
+coreLitToJS (Lstring s) typ | show typ `elem` [
+        "ghczmprim:GHCziPrim.Addrzh"]
+    = whnf $ object (show s)
+coreLitToJS (Lchar c) typ | show typ == "ghczmprim:GHCziPrim.Charzh"
+    = whnf $ object $ show (ord c)
+coreLitToJS (Lrational r) typ | show typ `elem` [
+        "ghczmprim:GHCziPrim.Doublezh",
+        "ghczmprim:GHCziPrim.Floatzh"]
+    = whnf $ object $ printf "(%i / %i)" (numerator r) (denominator r)
+coreLitToJS x typ = error $ show ("coreLit", x, typ, cons x)
   where
-    mkContextFromArray :: [Vdef] -> JSObject -> JSA Context
-    mkContextFromArray vdefs scope =
-        foldl (\ c (name, v) -> insert name v c) parentContext <$>
-        zipWithM (inner scope) [0..] vdefs
-    inner :: JSObject -> Integer -> Vdef -> JSA (QName, Term)
-    inner scope i vdef = do
-        t <- quote $ return (scope JS.! attr (qnameToJSAttr (vdefName vdef)))
-        return (vdefName vdef, t)
+    cons (Lint n) = "Lint"
+    cons (Lchar c) = "Lchar"
+    cons (Lstring s) = "Lstring"
+    cons (Lrational r) = "Lrational"
+
+integerToJSTerm :: Integer -> JSA Term
+integerToJSTerm 0 = cons "Naught"
+integerToJSTerm n | n > 0 && n < 127 = do
+    digit <- whnf $ object (show n)
+    none <- cons "None"
+    let digits = none
+    some <- cons "Some"
+    someDigit <- app some digit
+    digits <- app someDigit digits
+    positive <- cons "Positive"
+    app positive digits
+integerToJSTerm n = error ("integerToJSTerm: " ++ show n)
+
+cons :: String -> JSA Term
+cons n = whnf $ object ("glommConstructorFunction(\"" ++ n ++ "\")")
+app :: Term -> Term -> JSA Term
+app fun arg = apply (cast $ object "glommApply") (fun, arg)
+
 
 vdefName :: Vdef -> QName
 vdefName (Vdef (qname, _, _)) = qname
 
 throw :: String -> JSA Term
 throw err = quote $ return $ object ("(function () {throw \"" ++ err ++ "\";})()")
-
--- * RTS
-
-rts :: IO (String, String)
-rts = do
-    ghcPrim <- readFile "ghcPrim.js"
-    prelude <- readFile "pre.js"
-    rts <- readFile "post.js"
-    return (prelude ++ ghcPrim, rts)

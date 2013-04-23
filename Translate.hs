@@ -107,10 +107,6 @@ quote codeGen = do
     f <- function $ \ () -> codeGen
     apply (cast $ object "glommQuoted") f
 
--- | Unquotes a value.
-toWhnf :: Term -> JSA ()
-toWhnf t = t # invoke "toWhnf" ()
-
 
 generateTerm :: Exp -> GenerateTerm
 generateTerm (Lam (Vb (var, _)) exp) context = do
@@ -140,9 +136,11 @@ generateTerm (Core.Appt exp t) context = do
 generateTerm (Core.Let vdefg exp) context = do
     newContext <- letContext vdefg context
     generateTerm exp newContext
-generateTerm (Core.Cast exp y) context = error "cast" -- generateTerm exp context
+generateTerm (Core.Cast exp y) context = do
+    comment ("cast to " ++ show y)
+    generateTerm exp context
 generateTerm (Core.Note x y) _ = error $ show ("note", x)
--- ~ generateTerm (Core.External externalVar typ) = externalVar
+generateTerm (Core.External externalVar typ) context = throw ("external call: " ++ externalVar)
 generateTerm (Core.Case scrutineeJS scrutineeBind typ alts) context = do
     scrutinee <- generateTerm scrutineeJS context
     rhs <- function $ \ scrutineeInWhnf ->
@@ -173,7 +171,6 @@ altsToIfs scrutinee (Acon (_, consName) tbinds binds exp : r) context = do
         (altsToIfs scrutinee r context)
 altsToIfs scrutinee (Alit (Literal lit _typ) exp : r) context = do
     litTerm <- coreLitToJS lit
-    toWhnf litTerm
     ifB ((scrutinee JS.! attr "value" :: JSObject) ==* (litTerm JS.! attr "value"))
         -- then
         (generateTerm exp context)
@@ -185,11 +182,14 @@ altsToIfs scrutinee (Adefault exp : []) context = do
 altsToIfs scrutinee (Adefault exp : r) context = error "Adefault should always come last."
 altsToIfs _ [] _ = throw "pattern matching failure"
 
+-- | Returns a litaral as a Term in whnf.
 coreLitToJS :: CoreLit -> JSA Term
 coreLitToJS (Lint n) = whnf $ object $ show n
-coreLitToJS (Lstring s) = whnf $ object ("\"" ++ s ++ "\"")
+coreLitToJS (Lstring s) = whnf $ object (show s)
 coreLitToJS (Lchar c) = whnf $ object $ show (ord c)
--- ~ coreLitToJS (Lrational r) = printf "(%i, %i)" (numerator r) (denominator r)
+coreLitToJS (Lrational r) = do
+    throw "rational literal"
+    -- ~ whnf $ object $ printf "(%i, %i)" (numerator r) (denominator r)
 coreLitToJS x = error $ show ("coreLit", x)
 
 letContext :: Vdefg -> Context -> JSA Context

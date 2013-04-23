@@ -79,6 +79,14 @@ parseImports oFile hsFile =
 baseModules :: [FilePath]
 baseModules =
     "GHC/CString.hs" :
-    -- ~ "GHC/Classes.hs" :
+    "GHC/Base.lhs" :
+    "GHC/List.lhs" :
+    "GHC/Enum.lhs" :
+    "GHC/Char.hs" :
+    "GHC/Num.lhs" :
+    "GHC/Integer/Type.hs" :
+    "GHC/Classes.hs" :
+    -- ~ "GHC/Real.lhs" :
+    -- ~ "GHC/Show.lhs" :
     -- ~ "GHC/Types.hs" :
     []

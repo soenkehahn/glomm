@@ -74,10 +74,9 @@ toJS pre post modules = do
         entryPoint = (Just anName, "main")
     jsCode <- sunroofCompileJSA def "sunroofMain" $ do
         c <- emptyContext
-        topLevel :: Context <- letContext (Core.Rec $ flattenBinds vdefgs) c
-        -- ~ error $ show topLevel
-        return (topLevel Map.! entryPoint)
-    return $ unlines (pre : jsCode : post : [])
+        (topLevelContext, moduleArray) :: (Context, JSObject) <- letContext (Core.Rec $ flattenBinds vdefgs) c
+        return moduleArray
+    return $ unlines (pre : jsCode : printf post (qnameToString entryPoint) : [])
 
 emptyContext :: JSA Context
 emptyContext = do
@@ -97,10 +96,10 @@ type GenerateTerm = Context -> JSA Term
 type Term = JSObject
 
 
-qnameToJSAttr :: QName -> String
-qnameToJSAttr (Nothing, v) =
+qnameToString :: QName -> String
+qnameToString (Nothing, v) =
     "l_" ++ v
-qnameToJSAttr q@(Just (M (P package, parentModules, mod)), v) =
+qnameToString q@(Just (M (P package, parentModules, mod)), v) =
     "g_" ++
     intercalate "_" (package : parentModules ++ mod : v : [])
 
@@ -116,7 +115,7 @@ quote codeGen = do
     apply (cast $ object "glommQuoted") f
 
 
-letContext :: Vdefg -> Context -> JSA Context
+letContext :: Vdefg -> Context -> JSA (Context, JSObject)
 letContext (Nonrec vdef) context =
     comment "could be done more efficiently" >>
     letContext (Core.Rec [vdef]) context
@@ -130,9 +129,10 @@ letContext (Core.Rec vdefs) parentContext = do
             return r
         scope <- new "Object" ()
         forM_ (zip (map vdefName vdefs) values) $ \ (name, value) ->
-            scope # attr (qnameToJSAttr name) := value
+            scope # attr (qnameToString name) := value
         return scope
-    mkContextFromArray vdefs outerScope
+    c <- mkContextFromArray vdefs outerScope
+    return (c, outerScope)
   where
     mkContextFromArray :: [Vdef] -> JSObject -> JSA Context
     mkContextFromArray vdefs scope =
@@ -140,7 +140,7 @@ letContext (Core.Rec vdefs) parentContext = do
         zipWithM (inner scope) [0..] vdefs
     inner :: JSObject -> Integer -> Vdef -> JSA (QName, Term)
     inner scope i vdef = do
-        t <- quote $ return (scope JS.! attr (qnameToJSAttr (vdefName vdef)))
+        t <- quote $ return (scope JS.! attr (qnameToString (vdefName vdef)))
         return (vdefName vdef, t)
 
 
@@ -158,7 +158,7 @@ generateTerm (App f x) context = do
     apply (cast $ object "glommApply") (fun, arg)
 generateTerm (Core.Var qname) context =
     maybe
-        (comment ("var lookup error: " ++ show qname ++ "\n" ++ ppShow (keys context)) >> return (object (qnameToJSAttr qname)))
+        (comment ("var lookup error: " ++ show qname ++ "\n" ++ ppShow (keys context)) >> return (object (qnameToString qname)))
         (return)
         (Map.lookup qname context)
 generateTerm (Core.Lit (Literal coreLit typ)) context = do
@@ -170,7 +170,7 @@ generateTerm (Core.Appt exp t) context = do
     comment ("appt " ++ show t)
     generateTerm exp context
 generateTerm (Core.Let vdefg exp) context = do
-    newContext <- letContext vdefg context
+    (newContext, _) <- letContext vdefg context
     generateTerm exp newContext
 generateTerm (Core.Cast exp y) context = do
     comment ("cast to " ++ show y)

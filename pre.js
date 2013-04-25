@@ -9,7 +9,7 @@ function glConsValue (name) {
     t.toStr = function () {
         var r = "Cons: " + name;
         for (i in this.glConsArgs) {
-            r = r + " @ (" + this.glConsArgs[i].toStr() + ")"?;
+            r = r + " @ (" + this.glConsArgs[i].toStr() + ")";
         };
         return r;
     };

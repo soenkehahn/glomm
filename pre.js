@@ -44,7 +44,7 @@ function glShowConsTerm(c) {
     return r;
 };
 
-function toWhnf(t, print) {
+function toWhnf(t) {
     while (typeof(t.value) == "undefined") {
         t.toWhnff();
     };

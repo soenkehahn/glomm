@@ -1,23 +1,32 @@
 
 // Returns a constructed value (not a term)
-function glommConstructorFunction (name) {
+function glConsValue (name) {
     var t = {};
     t.isConstructed = true;
-    t.glommConstructorName = name;
-    t.glommConstructorArgs = [];
+    t.glConsName = name;
+    t.glConsArgs = [];
 
-    t.toString = function () {
+    t.toStr = function () {
         var r = "Cons: " + name;
-        for (i in t.glommConstructorArgs) {
-            r = r + " @ " + t.glommConstructorArgs[i].toString();
+        for (i in this.glConsArgs) {
+            r = r + " @ (" + this.glConsArgs[i].toStr() + ")"?;
         };
         return r;
     };
     return t;
 };
 
+function cloneConsValue(consValue) {
+    var r = glConsValue(consValue.glConsName);
+    for (i in consValue.glConsArgs) {
+        r.glConsArgs.push(consValue.glConsArgs[i]);
+    };
+    return r;
+};
+
+
 // this is a bit magical atm. When we have a good idea how the entry point is typed, this can be implemented better.
-function glommShowConstructor(c) {
+function glShowConsTerm(c) {
     toWhnf(c);
     if (typeof c.value == "number") {
         return ("Prim: " + c.value);
@@ -25,47 +34,47 @@ function glommShowConstructor(c) {
     if (typeof c.value == "string") {
         return ("Prim: " + c.value);
     };
-    if (typeof c.value.glommConstructorName == "undefined") {
+    if (typeof c.value.glConsName == "undefined") {
         throw "name undefined: " + c.value + " " + typeof(c.value);
     };
-    var r = c.value.glommConstructorName;
-    for (var i in c.value.glommConstructorArgs) {
-        r += " @ " + glommShowConstructor(c.value.glommConstructorArgs[i]);
+    var r = c.value.glConsName;
+    for (var i in c.value.glConsArgs) {
+        r += " @ (" + glShowConsTerm(c.value.glConsArgs[i]) + ")"; 
     };
     return r;
 };
 
-function toWhnf(t) {
-    var c = 0;
+function toWhnf(t, print) {
     while (typeof(t.value) == "undefined") {
-        c += 1;
-        if (c > 10000) {
-            // ~ throw "too many steps";
-        };
         t.toWhnff();
     };
 };
 
 // Returns a term that is in whnf.
-function glommFromWhnf(o) {
+function glWhnfTerm(o) {
     var t = {};
     t.value = o;
 
-    t.toString = function () {
-        return ("whnf: " + t.value);
+    t.toStr = function () {
+        if (typeof(t.value.isConstructed) == "undefined") {
+            return ("whnf: " + t.value);
+        } else {
+            return ("whnf: " + t.value.toStr());
+        };
     };
     return t;
 };
 
 // Returns a term that is a thunk.
-function glommQuoted(quoted) {
+function glQuotedTerm(quoted) {
     var t = {
         toWhnff: function () {
             var result = quoted();
             this.value = result.value;
             this.toWhnff = result.toWhnff;
+            this.toStr = result.toStr;
         },
-        toString: function () {
+        toStr: function () {
             return "thunk";
         }
     };
@@ -73,7 +82,7 @@ function glommQuoted(quoted) {
 };
 
 // Returns a term that is an application of two terms.
-function glommApply(f, x) {
+function glApplyTerm(f, x) {
     var t = {};
     t.toWhnff = function () {
         if (typeof(f.value) == "undefined") {
@@ -81,25 +90,28 @@ function glommApply(f, x) {
             return;
         } else {
             if (f.value.isConstructed) {
-                f.value.glommConstructorArgs.push(x);
-                this.value = f.value;
+                var clonedValue = cloneConsValue(f.value);
+                clonedValue.glConsArgs.push(x);
+                this.value = clonedValue;
+                this.toStr = f.toStr;
             } else {
                 // beta reduction
                 var result = (f.value)(x)
                 this.value = result.value;
                 this.toWhnff = result.toWhnff;
+                this.toStr = result.toStr;
             };
         };
     };
-    t.toString = function () {
-        return ("(" + f.toString() + " @ " + x.toString() + ")");
+    t.toStr = function () {
+        return ("(" + f.toStr() + " @ " + x.toStr() + ")");
     };
     return t;
 };
 
-// Returns a term for a cast.
+// Returns a term for a case statement.
 // The rhs expects the scrutinee in whnf.
-function glommCast (scrutinee, rhsFun) {
+function glCaseTerm (scrutinee, rhsFun) {
     var t = {};
     t.toWhnff = function () {
         if (typeof(scrutinee.value) == "undefined") {
@@ -109,7 +121,11 @@ function glommCast (scrutinee, rhsFun) {
             var result = rhsFun(scrutinee);
             this.value = result.value;
             this.toWhnff = result.toWhnff;
+            this.toStr = result.toStr;
         };
+    };
+    t.toStr = function () {
+        return "case: " + scrutinee.toStr();
     };
     return t;
 };
@@ -117,3 +133,10 @@ function glommCast (scrutinee, rhsFun) {
 function patError (msg) {
     throw ("Non-exhaustive patterns in " + msg);
 }
+
+function assertNotNull (a, identifier) {
+    if (typeof(a) == "undefined") {
+        throw ("identifier not defined: " + identifier);
+    };
+    return a;
+};

@@ -1,5 +1,5 @@
 
 
+
 // entering the haskell code
-debugger;
-console.log(glommShowConstructor(sunroofMain.%s));
+console.log(glShowConsTerm(main.%s));

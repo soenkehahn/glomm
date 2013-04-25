@@ -24,7 +24,7 @@ testFile :: FilePath -> IO ()
 testFile file = do
     putStrLn ("testing " ++ file ++ "...")
     let jsFile = ("_make" </> file <.> ".hcr.js")
-    sys "runhaskell" ["glomm.hs", jsFile]
+    sysNoOut "runghc" ["-O1", "glomm.hs", jsFile, "-p", "-V"]
     output <- sys "nodejs" [jsFile]
     expected <- readFile (file <.> "exp")
     when (expected /= output) $
@@ -38,3 +38,9 @@ sys cmd options = do
     when (ec /= ExitSuccess) $ do
         error ("fail: " ++ show ec)
     return output
+
+sysNoOut :: String -> [String] -> IO ()
+sysNoOut cmd options = do
+    ec <- system (unwords (cmd : options))
+    when (ec /= ExitSuccess) $ do
+        error ("fail: " ++ show ec)

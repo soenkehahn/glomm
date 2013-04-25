@@ -2,25 +2,33 @@
 // utils
 
 function toHsBool (b) {
-    var r;
     if (b) {
-        r = glommConstructorFunction("True");
+        return glConsValue("True");
     } else {
-        r = glommConstructorFunction("False");
+        return glConsValue("False");
     };
-    return r;
 };
 
 function primFunction1(f) {
-    return glommFromWhnf(function (a) {
-        a.toWhnf();
-        return glommFromWhnf(f(a.value));
+    return glWhnfTerm(function (a) {
+        var t = {};
+        t.toWhnff = function () {
+            if (typeof(a.value) == "undefined") {
+                a.toWhnff();
+                return;
+            };
+            this.value = f(a);
+        };
+        t.toStr = function () {
+            return "primop1";
+        };
+        return t;
     })
 };
 
 function primFunction2(f) {
-    return glommFromWhnf(function (a) {
-        return glommFromWhnf(function (b) {
+    return glWhnfTerm(function (a) {
+        return glWhnfTerm(function (b) {
             var t = {};
             t.toWhnff = function () {
                 if (typeof(a.value) == "undefined") {
@@ -32,6 +40,9 @@ function primFunction2(f) {
                     return;
                 };
                 this.value = f(a.value, b.value);
+            };
+            t.toStr = function () {
+                return "primop2";
             };
             return t;
         })
@@ -46,10 +57,14 @@ var f = null; // tmp variable
 f = function (hsString) {
     throw "error of hsString";
 };
-var g_base_GHC_Err_error = primFunction1(f);
+ghczmprim.g_base_GHC_Err_error = primFunction1(f);
 
-// javascript implementation of GHC.Prim
 
+// * javascript implementation of GHC.Prim
+
+// ** Addr#
+
+// indexCharOffAddr#
 f = function (addr, offset) {
     if (offset > addr.length + 5) {
         throw "segfault";
@@ -60,52 +75,81 @@ f = function (addr, offset) {
         return addr.charCodeAt(offset);
     };
 };
-var g_ghczmprim_GHC_Prim_indexCharOffAddrzh = primFunction2(f);
+ghczmprim.g_ghczmprim_GHC_Prim_indexCharOffAddrzh = primFunction2(f);
 
+// ** Int#
+
+// +#
 f = function (a, b) {
     return (a + b);
 };
-// +#
-var g_ghczmprim_GHC_Prim_zpzh = primFunction2(f);
+ghczmprim.g_ghczmprim_GHC_Prim_zpzh = primFunction2(f);
 
+// -#
 f = function (a, b) {
     return (a - b);
 };
-// -#
-var g_ghczmprim_GHC_Prim_zmzh = primFunction2(f);
+ghczmprim.g_ghczmprim_GHC_Prim_zmzh = primFunction2(f);
 
+// negateInt#
+f = function (i) {
+    return (-i);
+};
+ghczmprim.g_ghczmprim_GHC_Prim_negateIntzh = primFunction1(f);
+
+// remInt#
+f = function (a, b) {
+    return (a % b);
+};
+ghczmprim.g_ghczmprim_GHC_Prim_remIntzh = primFunction2(f);
+
+// >=#
 f = function (a, b) {
     return toHsBool(a >= b);
 };
-// >=#
-var g_ghczmprim_GHC_Prim_zgzezh = primFunction2(f);
+ghczmprim.g_ghczmprim_GHC_Prim_zgzezh = primFunction2(f);
 
+// >#
 f = function (a, b) {
     return toHsBool(a > b);
 };
-// >#
-var g_ghczmprim_GHC_Prim_zgzh = primFunction2(f);
+ghczmprim.g_ghczmprim_GHC_Prim_zgzh = primFunction2(f);
 
+// ==#
 f = function (a, b) {
     return toHsBool(a == b);
 };
-// ==#
-var g_ghczmprim_GHC_Prim_zezezh = primFunction2(f);
+ghczmprim.g_ghczmprim_GHC_Prim_zezezh = primFunction2(f);
 
+// ** Word#
+
+// minusWord#
+f = function (a, b) {
+    return (a - b);
+};
+ghczmprim.g_ghczmprim_GHC_Prim_minusWordzh = primFunction2(f);
+
+// ltWord#
 f = function (a, b) {
     return toHsBool(a < b);
 };
-// ltWord#
-var g_ghczmprim_GHC_Prim_ltWordzh = primFunction2(f);
+ghczmprim.g_ghczmprim_GHC_Prim_ltWordzh = primFunction2(f);
 
+// gtWord#
 f = function (a, b) {
     return toHsBool(a > b);
 };
-// gtWord#
-var g_ghczmprim_GHC_Prim_gtWordzh = primFunction2(f);
+ghczmprim.g_ghczmprim_GHC_Prim_gtWordzh = primFunction2(f);
 
+// eqWord#
 f = function (a, b) {
     return toHsBool(a == b);
 };
-// eqWord#
-var g_ghczmprim_GHC_Prim_gtWordzh = primFunction2(f);
+ghczmprim.g_ghczmprim_GHC_Prim_eqWordzh = primFunction2(f);
+
+// word2Int#
+f = function (w) {
+    return w;
+};
+ghczmprim.g_ghczmprim_GHC_Prim_word2Intzh = primFunction1(f);
+

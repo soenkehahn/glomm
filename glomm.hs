@@ -37,13 +37,27 @@ main = shakeArgs shakeOptions{shakeFiles = "_make/", shakeProgress = progressSim
 
     "_make//*.hs.hcr.js" *> \ jsFile -> do
         need ["pre.js", "ghcPrim.js", "post.js"]
+        need $
+            "_make/ghc-prim.package.js.opt" :
+            "_make/base.package.js.opt" :
+            "_make/integer-simple.package.js.opt" :
+            []
         let coreFile = dropExtension jsFile
         hsImports <- readFileLines (dropExtension coreFile <.> "transitiveImports")
         let importCoreFiles = map (\ f -> "_make" </> f <.> ".hcr") hsImports
-            baseCoreFiles = map (\ f -> "_make" </> f <.> ".hcr") baseModules
         need (coreFile : importCoreFiles)
         liftIO $ putStrLn ("compiling " ++ show (coreFile : importCoreFiles))
-        liftIO $ compileFiles (Modules coreFile (importCoreFiles ++ baseCoreFiles)) jsFile
+        liftIO $ compileFiles (MainModule coreFile importCoreFiles) jsFile
+
+    "_make/*.package.js" *> \ jsFile -> do
+        let package = dropDirectory1 $ dropExtension $ dropExtension jsFile
+        modules <-
+            map (\ f -> package </> replaceExtension f ".hcr") <$>
+            filter (not . ("#" `isPrefixOf`)) <$>
+            readFileLines (package </> "modules")
+        need modules
+        liftIO $ putStrLn (package ++ ": " ++ show modules)
+        liftIO $ compileFiles (Package package modules) jsFile
 
     "_make//*.hs.transitiveImports" *> \ importsFile -> do
         directImports <- readFileLines (replaceExtension importsFile ".directImports")
@@ -64,6 +78,15 @@ main = shakeArgs shakeOptions{shakeFiles = "_make/", shakeProgress = progressSim
         directImports <- parseImports oFile hsFile <$> readFile' ghcMakeFile
         liftIO $ writeFile importsFile $ unlines directImports
 
+    "//*.js.opt" *> \ optFile -> do
+        let jsFile = dropExtension optFile
+        need [jsFile]
+        -- google's closure compiler
+        system' "closure" $
+            "--js" : jsFile :
+            "--js_output_file" : optFile :
+            []
+
     return ()
 
 
@@ -75,18 +98,3 @@ parseImports oFile hsFile =
     map (words >>>
          last >>>
          flip replaceExtension ".hs")
-
-baseModules :: [FilePath]
-baseModules =
-    "GHC/CString.hs" :
-    "GHC/Base.lhs" :
-    "GHC/List.lhs" :
-    "GHC/Enum.lhs" :
-    "GHC/Char.hs" :
-    "GHC/Num.lhs" :
-    "GHC/Integer/Type.hs" :
-    "GHC/Classes.hs" :
-    -- ~ "GHC/Real.lhs" :
-    -- ~ "GHC/Show.lhs" :
-    -- ~ "GHC/Types.hs" :
-    []

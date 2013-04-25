@@ -17,7 +17,7 @@ import Data.Boolean
 import Data.Char
 import Data.Default
 import Data.Foldable
-import Data.List (intercalate)
+import Data.List (intercalate, isPrefixOf)
 import Data.List (sortBy)
 import Data.Map as Map (Map, insert, lookup, keys, (!), fromList)
 import Data.Maybe
@@ -26,38 +26,48 @@ import Data.Ratio
 import Data.Traversable
 import Debug.Trace
 import Language.Core.Core as Core
+import Language.Core.Encoding
 import Language.Core.ParseGlue
 import Language.Core.Parser
 import Language.Sunroof as JS
-import Prelude hiding (mapM, foldl, elem)
+import Prelude hiding (mapM, foldl, elem, log)
 import System.Environment
 import Text.Printf
 import Text.Show.Pretty
 
 
-data Modules a = Modules {
+data Modules a
+  = MainModule {
     mainModule :: a,
     imports :: [a]
+  }
+  | Package {
+    name :: String,
+    modules :: [a]
   }
     deriving (Functor, Traversable, Foldable, Show)
 
 
 rts :: IO (String, String)
 rts = do
-    ghcPrim <- readFile "ghcPrim.js"
     prelude <- readFile "pre.js"
+    hsGhcPrim <- readFile "_make/ghc-prim.package.js.opt"
+    jsGhcPrim <- readFile "ghcPrim.js"
+    base <- readFile "_make/base.package.js.opt"
+    integerSimple <- readFile "_make/integer-simple.package.js.opt"
     rts <- readFile "post.js"
-    return (prelude ++ ghcPrim, rts)
+    return (intercalate "\n\n\n" [prelude, hsGhcPrim, jsGhcPrim, base, integerSimple], rts)
 
 
 compileFiles :: Modules FilePath -> FilePath -> IO ()
 compileFiles inputFiles outputFile = do
-    code <- mapM readFile inputFiles
+    code <-
+        fmap (replace "integerzmgmp:" "integerzmsimple:") <$>
+        mapM readFile inputFiles
     let eModules = mapM (\ c -> parse c 0) code
-    (pre, post) <- rts
     case eModules of
         OkP modules -> do
-            jsCode <- toJS pre post modules
+            jsCode <- toJS modules
             writeFile outputFile jsCode
         FailP err -> error ("core parse error: " ++ err)
 
@@ -66,17 +76,27 @@ instance Monad ParseResult where
     FailP err >>= b = FailP err
     return = OkP
 
-toJS :: String -> String -> Modules Module -> IO String
-toJS pre post modules = do
+toJS :: Modules Module -> IO String
+toJS modules@(MainModule mainModule imports) = do
     let getVdefs (Module _ _ vdefs) = vdefs
         vdefgs = mconcat $ fmap getVdefs (toList modules)
-        (Module anName _ _) = mainModule modules
+        (Module anName _ _) = mainModule
         entryPoint = (Just anName, "main")
-    jsCode <- sunroofCompileJSA def "sunroofMain" $ do
+    (pre, post) <- rts
+    jsCode <- sunroofCompileJSA def "main" $ do
         c <- emptyContext
         (topLevelContext, moduleArray) :: (Context, JSObject) <- letContext (Core.Rec $ flattenBinds vdefgs) c
         return moduleArray
-    return $ unlines (pre : jsCode : printf post (qnameToString entryPoint) : [])
+    return $ intercalate "\n\n\n" (pre : jsCode : printf post (qnameToString entryPoint) : [])
+toJS (Package package modules) = do
+    let getVdefs (Module _ _ vdefs) = vdefs
+        vdefgs = mconcat $ fmap getVdefs (toList modules)
+    jsCode <- sunroofCompileJSA def (zEncodeString package) $ do
+        comment ("package: " ++ package)
+        c <- emptyContext
+        (topLevelContext, moduleArray) :: (Context, JSObject) <- letContext (Core.Rec $ flattenBinds vdefgs) c
+        return moduleArray
+    return jsCode
 
 emptyContext :: JSA Context
 emptyContext = do
@@ -106,13 +126,13 @@ qnameToString q@(Just (M (P package, parentModules, mod)), v) =
 -- | Creates a term for a term that is already in whnf.
 --   (More efficient than quote.)
 whnf :: JSObject -> JSA Term
-whnf x = apply (cast $ object "glommFromWhnf") x
+whnf x = apply (cast $ object "glWhnfTerm") x
 
 -- | Quotes a value (defers evaluation).
 quote :: JSA JSObject -> JSA Term
 quote codeGen = do
     f <- function $ \ () -> codeGen
-    apply (cast $ object "glommQuoted") f
+    apply (cast $ object "glQuotedTerm") f
 
 
 letContext :: Vdefg -> Context -> JSA (Context, JSObject)
@@ -155,17 +175,23 @@ generateTerm (Lam (Tb (t, k)) exp) context = do
 generateTerm (App f x) context = do
     fun <- generateTerm f context
     arg <- generateTerm x context
-    apply (cast $ object "glommApply") (fun, arg)
+    apply (cast $ object "glApplyTerm") (fun, arg)
 generateTerm (Core.Var qname) context =
     maybe
-        (comment ("var lookup error: " ++ show qname ++ "\n" ++ ppShow (keys context)) >> return (object (qnameToString qname)))
+        (do
+            comment ("not in package scope: " ++ show qname ++ "\n" ++ ppShow (keys context))
+            -- existence should be enforced statically, not at runtime.
+            let id = package ++ "." ++ qnameToString qname
+            quote $ return $ object ("assertNotNull(" ++ id ++ ", '" ++ id ++ "')"))
         (return)
         (Map.lookup qname context)
+  where
+    (Just (M (P package, _, _)), _) = qname
 generateTerm (Core.Lit (Literal coreLit typ)) context = do
     comment ("literal " ++ show coreLit)
     coreLitToJS coreLit typ
 generateTerm (Core.Dcon (t, name)) _ =
-    whnf (object ("glommConstructorFunction(\"" ++ name ++ "\")"))
+    whnf (object ("glConsValue(\"" ++ name ++ "\")"))
 generateTerm (Core.Appt exp t) context = do
     comment ("appt " ++ show t)
     generateTerm exp context
@@ -181,7 +207,7 @@ generateTerm (Core.Case scrutineeJS scrutineeBind typ alts) context = do
     scrutinee <- generateTerm scrutineeJS context
     rhs <- function $ \ scrutineeInWhnf ->
         altsToIfs scrutineeInWhnf (sortAlts alts) (insert (Nothing, fst scrutineeBind) scrutineeInWhnf context)
-    apply (cast $ object "glommCast") (scrutinee, rhs)
+    apply (cast $ object "glCaseTerm") (scrutinee, rhs)
 generateTerm exp _ = error $ show ("exp", exp)
 
 sortAlts :: [Alt] -> [Alt]
@@ -197,10 +223,10 @@ altsToIfs scrutinee (Acon (_, consName) tbinds binds exp : r) context = do
     comment ("tbinds: " ++ show tbinds)
     comment ("vbinds: " ++ show binds)
     patternBinds :: [(QName, Term)] <- forM (zip [0..] binds) $ \ (i, (var, _)) -> do
-        let args :: JSArray JSObject = (scrutinee JS.! attr "value" :: JSObject) JS.! (label "glommConstructorArgs")
+        let args :: JSArray JSObject = (scrutinee JS.! attr "value" :: JSObject) JS.! (label "glConsArgs")
         return ((Nothing, var), args JS.! index (cast (object (show i))))
     let contextWithPatternBinds = foldl (\ m (n, t) -> insert n t m) context patternBinds
-    ifB (((scrutinee JS.! attr "value" :: JSObject) JS.! attr "glommConstructorName") ==* string consName)
+    ifB (((scrutinee JS.! attr "value" :: JSObject) JS.! attr "glConsName") ==* string consName)
         -- then
         (generateTerm exp contextWithPatternBinds)
         -- else
@@ -225,7 +251,7 @@ coreLitToJS (Lint n) typ | show typ `elem` [
         "ghczmprim:GHCziPrim.Wordzh",
         "ghczmprim:GHCziPrim.Charzh"]
     = whnf $ object $ show n
-coreLitToJS (Lint n) typ | show typ == "integerzmgmp:GHCziIntegerziType.Integer"
+coreLitToJS (Lint n) typ | show typ == "integerzmsimple:GHCziIntegerziType.Integer"
     = do
         comment "newInt"
         integerToJSTerm n
@@ -256,12 +282,12 @@ integerToJSTerm n | n > 0 && n < 127 = do
     digits <- app someDigit digits
     positive <- cons "Positive"
     app positive digits
-integerToJSTerm n = error ("integerToJSTerm: " ++ show n)
+integerToJSTerm n = throw ("integerToJSTerm: " ++ show n)
 
 cons :: String -> JSA Term
-cons n = whnf $ object ("glommConstructorFunction(\"" ++ n ++ "\")")
+cons n = whnf $ object ("glConsValue(\"" ++ n ++ "\")")
 app :: Term -> Term -> JSA Term
-app fun arg = apply (cast $ object "glommApply") (fun, arg)
+app fun arg = apply (cast $ object "glApplyTerm") (fun, arg)
 
 
 vdefName :: Vdef -> QName
@@ -269,3 +295,18 @@ vdefName (Vdef (qname, _, _)) = qname
 
 throw :: String -> JSA Term
 throw err = quote $ return $ object ("(function () {throw \"" ++ err ++ "\";})()")
+
+_log :: JSString -> JSString -> JSA ()
+_log a b = apply (cast $ object "console.log") (object (show a ++ " + '=?=' + " ++ show b))
+
+
+-- utils
+
+
+replace :: Eq a => [a] -> [a] -> [a] -> [a]
+replace needle replacement l@(a : r) =
+    if needle `isPrefixOf` l then
+        replacement ++ replace needle replacement (drop (length needle) l)
+      else
+        a : replace needle replacement r
+replace needle replacement [] = []

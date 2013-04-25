@@ -153,3 +153,20 @@ f = function (w) {
 };
 ghczmprim.g_ghczmprim_GHC_Prim_word2Intzh = primFunction1(f);
 
+// uncheckedShiftL#
+f = function (w, i) {
+    return (w << i);
+};
+ghczmprim.g_ghczmprim_GHC_Prim_uncheckedShiftLzh = primFunction2(f);
+
+// uncheckedShiftRL#
+f = function (w, i) {
+    return (w >> i);
+};
+ghczmprim.g_ghczmprim_GHC_Prim_uncheckedShiftRLzh = primFunction2(f);
+
+// or#
+f = function (a, b) {
+    return (a | b);
+};
+ghczmprim.g_ghczmprim_GHC_Prim_orzh = primFunction2(f);

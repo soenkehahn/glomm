@@ -51,12 +51,12 @@ data Modules a
 rts :: IO (String, String)
 rts = do
     prelude <- readFile "pre.js"
-    hsGhcPrim <- readFile "_make/ghc-prim.package.js.opt"
+    hsGhcPrim <- readFile "_make/ghc-prim.package.js"
     jsGhcPrim <- readFile "ghcPrim.js"
-    base <- readFile "_make/base.package.js.opt"
-    integerSimple <- readFile "_make/integer-simple.package.js.opt"
+    base <- readFile "_make/base.package.js"
+    integerSimple <- readFile "_make/integer-simple.package.js"
     rts <- readFile "post.js"
-    return (intercalate "\n\n\n" [prelude, hsGhcPrim, jsGhcPrim, base, integerSimple], rts)
+    return (intercalate "\n\n\n" [prelude, hsGhcPrim, jsGhcPrim, integerSimple, base], rts)
 
 
 compileFiles :: Modules FilePath -> FilePath -> IO ()

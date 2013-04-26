@@ -91,6 +91,12 @@ f = function (a, b) {
 };
 ghczmprim.g_ghczmprim_GHC_Prim_zmzh = primFunction2(f);
 
+// *#
+f = function (a, b) {
+    return (a * b);
+};
+ghczmprim.g_ghczmprim_GHC_Prim_ztzh = primFunction2(f);
+
 // negateInt#
 f = function (i) {
     return (-i);
@@ -153,14 +159,17 @@ f = function (w) {
 };
 ghczmprim.g_ghczmprim_GHC_Prim_word2Intzh = primFunction1(f);
 
+/* This is very buggy. It does not do the same thing as GHC.Prim
 // uncheckedShiftL#
 f = function (w, i) {
+    console.log(w + " << " + i, w << i);
     return (w << i);
 };
 ghczmprim.g_ghczmprim_GHC_Prim_uncheckedShiftLzh = primFunction2(f);
 
 // uncheckedShiftRL#
 f = function (w, i) {
+    console.log(w + " >> " + i, w >> i);
     return (w >> i);
 };
 ghczmprim.g_ghczmprim_GHC_Prim_uncheckedShiftRLzh = primFunction2(f);
@@ -170,3 +179,5 @@ f = function (a, b) {
     return (a | b);
 };
 ghczmprim.g_ghczmprim_GHC_Prim_orzh = primFunction2(f);
+
+*/

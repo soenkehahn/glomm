@@ -179,7 +179,7 @@ generateTerm (App f x) context = do
 generateTerm (Core.Var qname) context =
     maybe
         (do
-            comment ("not in package scope: " ++ show qname ++ "\n" ++ ppShow (keys context))
+            comment ("not in package scope: " ++ show qname)
             -- existence should be enforced statically, not at runtime.
             let id = package ++ "." ++ qnameToString qname
             quote $ return $ object ("assertNotNull(" ++ id ++ ", '" ++ id ++ "')"))

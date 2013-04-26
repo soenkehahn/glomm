@@ -14,6 +14,7 @@ import System.Process
 main :: IO ()
 main = do
     files <-
+        reverse <$>
         sort <$>
         map ("Test" </>) <$>
         filter ((== ".hs") . takeExtension) <$>

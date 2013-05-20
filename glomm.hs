@@ -29,6 +29,7 @@ main = shakeArgs shakeOptions{
     phony "clean" $ do
         removeFilesAfter "_make" ["//*"]
 
+    -- should be *.hs.hi
     ["_make//*.hcr", "_make//*.hi"] *>> \ [coreFile, hiFile] -> do
         let moduleFile = dropExtension coreFile
         hsFile <- searchHaskellFile (dropDirectory1 moduleFile)

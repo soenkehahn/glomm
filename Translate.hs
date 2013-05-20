@@ -30,7 +30,7 @@ import Language.Core.Encoding
 import Language.Core.ParseGlue
 import Language.Core.Parser
 import Language.Sunroof as JS
-import Prelude hiding (mapM, foldl, elem, log)
+import Prelude hiding (mapM, foldl, elem, log, concat)
 import System.Environment
 import Text.Printf
 import Text.Show.Pretty
@@ -39,7 +39,8 @@ import Text.Show.Pretty
 data Modules a
   = MainModule {
     mainModule :: a,
-    imports :: [a]
+    imports :: [a],
+    packages :: [FilePath]
   }
   | Package {
     name :: String,
@@ -48,15 +49,12 @@ data Modules a
     deriving (Functor, Traversable, Foldable, Show)
 
 
-rts :: IO (String, String)
+rts :: IO (String, String, String)
 rts = do
-    prelude <- readFile "pre.js"
-    hsGhcPrim <- readFile "_make/ghc-prim.package.js"
+    pre <- readFile "pre.js"
     jsGhcPrim <- readFile "ghcPrim.js"
-    base <- readFile "_make/base.package.js"
-    integerSimple <- readFile "_make/integer-simple.package.js"
-    rts <- readFile "post.js"
-    return (intercalate "\n\n\n" [prelude, hsGhcPrim, jsGhcPrim, integerSimple, base], rts)
+    post <- readFile "post.js"
+    return (pre, jsGhcPrim, post)
 
 
 compileFiles :: Modules FilePath -> FilePath -> IO ()
@@ -77,17 +75,26 @@ instance Monad ParseResult where
     return = OkP
 
 toJS :: Modules Module -> IO String
-toJS modules@(MainModule mainModule imports) = do
+toJS modules@(MainModule mainModule imports packages) = do
     let getVdefs (Module _ _ vdefs) = vdefs
         vdefgs = mconcat $ fmap getVdefs (toList modules)
         (Module anName _ _) = mainModule
         entryPoint = (Just anName, "main")
-    (pre, post) <- rts
+    (pre, ghcPrim, post) <- rts
     jsCode <- sunroofCompileJSA def "main" $ do
         c <- emptyContext
         (topLevelContext, moduleArray) :: (Context, JSObject) <- letContext (Core.Rec $ flattenBinds vdefgs) c
         return moduleArray
-    return $ intercalate "\n\n\n" (pre : jsCode : printf post (qnameToString entryPoint) : [])
+    packageCode <-
+        concat <$>
+        mapM readFile packages
+    return $ intercalate "\n\n\n" (
+      pre :
+      packageCode :
+      ghcPrim :
+      jsCode :
+      printf post (qnameToString entryPoint) :
+      [])
 toJS (Package package modules) = do
     let getVdefs (Module _ _ vdefs) = vdefs
         vdefgs = mconcat $ fmap getVdefs (toList modules)
@@ -272,22 +279,33 @@ coreLitToJS x typ = error $ show ("coreLit", x, typ, cons x)
     cons (Lrational r) = "Lrational"
 
 integerToJSTerm :: Integer -> JSA Term
-integerToJSTerm 0 = cons "Naught"
-integerToJSTerm n | n > 0 && n < 127 = do
-    digit <- whnf $ object (show n)
-    none <- cons "None"
-    let digits = none
-    some <- cons "Some"
-    someDigit <- app some digit
-    digits <- app someDigit digits
-    positive <- cons "Positive"
-    app positive digits
-integerToJSTerm n = throw ("integerToJSTerm: " ++ show n)
-
-cons :: String -> JSA Term
-cons n = whnf $ object ("glConsValue(\"" ++ n ++ "\")")
-app :: Term -> Term -> JSA Term
-app fun arg = apply (cast $ object "glApplyTerm") (fun, arg)
+integerToJSTerm n = throw "readInteger"
+-- integerToJSTerm 0 = cons "Naught"
+-- integerToJSTerm n | n > 0 && n < 127 = do
+--     digit <- whnf $ object (show n)
+--     none <- cons "None"
+--     let digits = none
+--     some <- cons "Some"
+--     someDigit <- app some digit
+--     digits <- app someDigit digits
+--     positive <- cons "Positive"
+--     app positive digits
+-- integerToJSTerm n = do
+--     nonPositive <- if (n >= 0) then cons "True" else cons "False"
+--     chunks <- mkChunks $ abs n
+--     glApply "integer-simple.GHC.Integer.Type.mkInteger" [nonPositive, chunks]
+--   where
+--     mkChunks :: Integer -> JSA [Term]
+--     mkChunks n | n < 2 ^ 31 = pure <$> whnf (object (show n))
+-- 
+-- glApply :: String -> [Term] -> JSA Term
+-- glApply funName arguments =
+--     error $ show (funName, arguments)
+-- 
+-- cons :: String -> JSA Term
+-- cons n = whnf $ object ("glConsValue(\"" ++ n ++ "\")")
+-- app :: Term -> Term -> JSA Term
+-- app fun arg = apply (cast $ object "glApplyTerm") (fun, arg)
 
 
 vdefName :: Vdef -> QName

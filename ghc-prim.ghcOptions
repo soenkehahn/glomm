@@ -1,0 +1,6 @@
+[
+"-XMagicHash",
+"-XUnboxedTuples",
+"-package", "ghc-prim",
+"-package-name", "ghc-prim"
+]

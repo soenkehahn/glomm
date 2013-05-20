@@ -1,0 +1,9 @@
+[
+"-Iinclude",
+"-I../../../include",
+"-XCPP",
+"-package", "integer-gmp",
+"-package", "ghc-prim",
+# is this really wise?
+"-package-name", "base"
+]

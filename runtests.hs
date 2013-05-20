@@ -13,6 +13,11 @@ import System.Process
 
 main :: IO ()
 main = do
+    sysNoOut "ghc" $ 
+      "--make" :
+      "glomm.hs" :
+      "-outputdir=tmp" :
+      []
     files <-
         reverse <$>
         sort <$>
@@ -20,12 +25,17 @@ main = do
         filter ((== ".hs") . takeExtension) <$>
         getDirectoryContents "Test"
     forM_ files testFile
+    
+dump :: String -> IO ()
+dump msg = putStrLn (msg ++ "\n" ++ replicate (length msg) '=')
 
 testFile :: FilePath -> IO ()
 testFile file = do
-    putStrLn ("testing " ++ file ++ "...")
-    let jsFile = ("_make" </> file <.> ".hcr.js")
-    sysNoOut "runghc" ["-O1", "glomm.hs", jsFile, "-p", "-V"]
+    dump ("testing " ++ file ++ "...")
+    let jsFile = ("_make" </> dropExtension file <.> ".hcr.js")
+    dump ("glomm -j 4 " ++ jsFile)
+    sysNoOut "./glomm" [jsFile, "-p", "-V"]
+    dump ("    nodejs " ++ jsFile)
     output <- sys "nodejs" [jsFile]
     expected <- readFile (file <.> "exp")
     when (expected /= output) $

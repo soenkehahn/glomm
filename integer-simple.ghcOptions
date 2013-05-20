@@ -1,0 +1,4 @@
+[
+"-package-name", "integer-simple",
+"-package", "ghc-prim"
+]

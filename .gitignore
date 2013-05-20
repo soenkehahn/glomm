@@ -5,3 +5,6 @@ cabal-dev
 *.chi
 *.chs.h
 .virthualenv
+ghc-7.6.3
+packageDB
+_make

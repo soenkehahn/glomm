@@ -279,7 +279,17 @@ coreLitToJS x typ = error $ show ("coreLit", x, typ, cons x)
     cons (Lrational r) = "Lrational"
 
 integerToJSTerm :: Integer -> JSA Term
-integerToJSTerm n = throw "readInteger"
+integerToJSTerm n = do
+    comment "hier"
+    let unpackString = object "ghczmprim.g_ghczmprim_GHC_CString_unpackCStringzh"
+    addr <- whnf (object (printf "\"%s\"" (show n)))
+    string :: JSObject <- apply (cast $ object "glApplyTerm") (unpackString, addr)
+    let readInteger = object "base.g_base_Text_Read_read"
+    apply (cast $ object "glApplyTerm") (readInteger, string)
+--     fun <- whnf (object "glommPrim.readInteger")
+--     result <- apply (cast $ object "glommPrim.readInteger") (object (printf "\"%s\"" (show n)))
+--     whnf result
+
 -- integerToJSTerm 0 = cons "Naught"
 -- integerToJSTerm n | n > 0 && n < 127 = do
 --     digit <- whnf $ object (show n)

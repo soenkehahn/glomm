@@ -15,6 +15,7 @@ main :: IO ()
 main = do
     sysNoOut "ghc" $ 
       "--make" :
+      "-threaded" :
       "glomm.hs" :
       "-outputdir=tmp" :
       []
@@ -25,15 +26,15 @@ main = do
         filter ((== ".hs") . takeExtension) <$>
         getDirectoryContents "Test"
     forM_ files testFile
-    
+
 dump :: String -> IO ()
 dump msg = putStrLn (msg ++ "\n" ++ replicate (length msg) '=')
 
 testFile :: FilePath -> IO ()
 testFile file = do
     dump ("testing " ++ file ++ "...")
-    let jsFile = ("_make" </> dropExtension file <.> ".hcr.js")
-    dump ("glomm -j 4 " ++ jsFile)
+    let jsFile = ("_make" </> file <.> ".hcr.js")
+    dump ("glomm " ++ jsFile)
     sysNoOut "./glomm" [jsFile, "-p", "-V"]
     dump ("    nodejs " ++ jsFile)
     output <- sys "nodejs" [jsFile]

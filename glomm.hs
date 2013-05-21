@@ -3,7 +3,9 @@
 import Control.Arrow ((>>>))
 import Data.List
 import Data.Monoid
+import Data.Bifunctor
 import Data.Maybe
+import Control.Monad (when)
 import Safe
 import Development.Shake
 import Development.Shake.FilePath
@@ -24,17 +26,15 @@ import Translate hiding (imports)
 main = shakeArgs shakeOptions{
                      shakeFiles = "_make/",
                      shakeProgress = progressSimple,
-                     shakeVerbosity = Loud
+                     shakeVerbosity = Normal
   } $ do
     phony "clean" $ do
         removeFilesAfter "_make" ["//*"]
 
     ["_make//*.hcr", "_make//*.hi"] *>> \ [coreFile, hiFile] -> do
-        let moduleFile = dropExtension coreFile
-        hsFile <- searchHaskellFile (dropDirectory1 moduleFile)
-        deps :: HaskellDependencies <- readDependencies
-             (moduleFile <.> "directImports")
-        let importHiFiles = map (\ f -> "_make" </> f <.> "hi") $ imports deps
+        hsFile <- searchHaskellFile False $ dropDirectory1 $ dropExtension coreFile
+        direct <- directImports ("_make" </> hsFile)
+        let importHiFiles = map (\ f -> "_make" </> replaceBootExtension f ".hi") direct
         need (hsFile : importHiFiles)
         ghcOptions <- readGhcOptions
         system' "ghc" $
@@ -54,37 +54,50 @@ main = shakeArgs shakeOptions{
             []
 
     "_make//*.hi-boot" *> \ hiBootFile -> do
-        error $ show ("hi-boot", hiBootFile)
+        hsFile <- searchHaskellFile True $ dropDirectory1 $ dropExtension hiBootFile
+        direct <- directImports ("_make" </> hsFile)
+        let importHiFiles = map (\ f -> "_make" </> replaceBootExtension f ".hi") direct
+        need (hsFile : importHiFiles)
+        ghcOptions <- readGhcOptions
+        system' "ghc" $
+            hsFile :
+            "-c" :
+            "-outputdir" : "_make" :
+            "-i_make" :
+            "-hide-all-packages" :
+--             "-package" : "base" :
+--             "-ohi" : hiBootFile :
+            ghcOptions ++
+            []
 
-    "_make//*.hcr.js" *> \ jsFile -> do
+    "_make//*hs.hcr.js" *> \ jsFile -> do
         need ["pre.js", "ghcPrim.js", "post.js"]
         neededPackages <- 
             map (\ f -> "packageDB" </> f <.> "package.js.opt") <$>
             readFileLines "packages"
         need neededPackages
+        transitive <- transitiveImports $ dropExtension $ dropExtension jsFile
         let coreFile = dropExtension jsFile
-            moduleFile = dropExtension $ dropExtension coreFile
-        transitiveDeps <- readDependencies (moduleFile <.> "transitiveImports")
-        let importCoreFiles =
-                map (\ f -> "_make" </> f <.> ".hcr")
-                    (imports transitiveDeps)
+            importCoreFiles =
+                map (\ f -> "_make" </> f <.> ".hcr") transitive
         need (coreFile : importCoreFiles)
         liftIO $ putStrLn ("compiling " ++ show (coreFile : importCoreFiles))
         liftIO $ compileFiles (MainModule coreFile importCoreFiles neededPackages) jsFile
 
-    "_make//*.transitiveImports" *> \ importsFile -> do
-        directDeps :: HaskellDependencies <-
-            readDependencies (replaceExtension importsFile ".directImports")
-        transitiveDeps :: [HaskellDependencies] <-
-            mapM readDependencies
-                 (map (\ f -> ("_make" </> f <.> "transitiveImports"))
-                      (imports directDeps))
-        liftIO $ writeFile importsFile $ show (mconcat (directDeps : transitiveDeps))
+    "_make//*hs.transitiveImports" *> \ importsFile -> do
+        let hsFile = dropDirectory1 $ dropExtension importsFile
+        direct :: [FilePath] <-
+            directImports hsFile
+        transitive :: [FilePath] <-
+            concat <$>
+            mapM transitiveImports direct
+        error "transitive"
+--         liftIO $ writeFile importsFile $ show (mconcat (directDeps : transitiveDeps))
 
     -- use ghc -M to generate file of direct dependencies
     "_make//*.directImports" *> \ importsFile -> do
-        hsFile <- searchHaskellFile $ dropDirectory1 $ dropExtension importsFile
-        let ghcMakeFile = importsFile <.> "ghcMakeFile"
+        let hsFile = dropDirectory1 $ dropExtension importsFile
+            ghcMakeFile = importsFile <.> "ghcMakeFile"
             oFile = replaceExtension hsFile ".o"
         need [hsFile]
         ghcOptions :: [String] <- readGhcOptions
@@ -96,8 +109,8 @@ main = shakeArgs shakeOptions{
             ghcOptions ++
             hsFile :
             []
-        directImports <- parseImports oFile hsFile <$> readFile' ghcMakeFile
-        liftIO $ writeFile importsFile $ show directImports
+        directImports <- parseImports oFile hsFile =<< readFile' ghcMakeFile
+        liftIO $ writeFile importsFile $ unlines directImports
 
     -- use google's closure compiler to optimize javascript
     "_make//*.js.opt" *> \ optFile -> do
@@ -112,13 +125,13 @@ main = shakeArgs shakeOptions{
     "_make/*.package.js" *> \ jsFile -> do
         -- build a package
         let package = dropDirectory1 $ dropExtension $ dropExtension jsFile
-        modules <-
+        coreFiles <-
             map (\ f -> "_make" </> f <.> "hcr") <$>
             filter (not . ("#" `isPrefixOf`)) <$>
             readFileLines (package <.> "modules")
-        need modules
-        liftIO $ putStrLn (package ++ ": " ++ show modules)
-        liftIO $ compileFiles (Package package modules) jsFile
+        need coreFiles
+        liftIO $ putStrLn (package ++ ": " ++ show coreFiles)
+        liftIO $ compileFiles (Package package coreFiles) jsFile
 
     "packageDB//*.package.js.opt" *> \ packageFile -> do
         -- calls glomm to build a package and moves it to packageDB
@@ -136,6 +149,7 @@ main = shakeArgs shakeOptions{
             []
         let localTarget = "_make" </> package <.> "package.js.opt"
         systemCwd packageDir glommBinary $
+            "--jobs=4" :
             localTarget :
             []
         copyFile' (packageDir </> localTarget) ("packageDB" </> package <.> "package.js.opt")
@@ -154,10 +168,11 @@ main = shakeArgs shakeOptions{
     return ()
 
 -- | Searches for a file with either .lhs or .hs
-searchHaskellFile :: String -> Action FilePath
-searchHaskellFile file = do
-    let lhsFile = file <.> ".lhs"
-        hsFile  = file <.> ".hs"
+searchHaskellFile :: Bool -> String -> Action FilePath
+searchHaskellFile bootFile file = do
+    let addBoot = if bootFile then (++ "-boot") else id
+        lhsFile = addBoot (file <.> ".lhs")
+        hsFile  = addBoot (file <.> ".hs")
     lhsExists <- doesFileExist lhsFile
     hsExists <- doesFileExist hsFile
     return $ if lhsExists
@@ -174,38 +189,25 @@ readGhcOptions =
     lines <$>
     readFile' "ghcOptions"
 
+directImports :: FilePath -> Action [FilePath]
+directImports file =
+    readFileLines (file <.> "directImports")
 
-data HaskellDependencies = HaskellDependencies {
-    imports :: [String],
-    bootImports :: [String]
-  }
-    deriving (Show, Read)
+transitiveImports :: FilePath -> Action [FilePath]
+transitiveImports file = do
+    error "trans"
+    readFileLines (file <.> "transitiveImports")
 
-instance Monoid HaskellDependencies where
-    mappend a b =
-        HaskellDependencies
-            (nub (      imports a ++       imports b))
-            (nub (  bootImports a ++   bootImports b))
-    mempty = HaskellDependencies [] []
-
-readDependencies :: FilePath -> Action HaskellDependencies
-readDependencies file =
-    readNote "cannot read dependencies" <$>
-    readFile' file
-
-parseImports :: FilePath -> FilePath -> String -> HaskellDependencies
-parseImports oFile hsFile makeFile =
-    HaskellDependencies directImports bootImports
+parseImports :: FilePath -> FilePath -> String -> Action [FilePath]
+parseImports oFile hsFile =
+    lines >>>
+    filter ((oFile ++ " ") `isPrefixOf`) >>>
+    map (words >>> last) >>>
+    map sort >>>
+    catMaybes >>>
+    map (either (searchHaskellFile False) (searchHaskellFile True)) >>>
+    sequence
   where
-    directImports = lefts parsed
-    bootImports = rights parsed
-    parsed = parse makeFile
-    parse =
-        lines >>>
-        filter ((oFile ++ " ") `isPrefixOf`) >>>
-        map (words >>> last) >>>
-        map sort >>>
-        catMaybes
     sort :: FilePath -> Maybe (Either FilePath FilePath)
     sort f | f == hsFile = Nothing
     sort f = Just $ case takeExtension f of

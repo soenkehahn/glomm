@@ -31,6 +31,7 @@ main = shakeArgs shakeOptions{
     phony "clean" $ do
         removeFilesAfter "_make" ["//*"]
 
+    -- should be *.hs.hi
     ["_make//*.hcr", "_make//*.hi"] *>> \ [coreFile, hiFile] -> do
         hsFile <- searchHaskellFile False $ dropDirectory1 $ dropExtension coreFile
         direct <- directImports ("_make" </> hsFile)

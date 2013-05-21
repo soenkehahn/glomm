@@ -33,7 +33,7 @@ dump msg = putStrLn (msg ++ "\n" ++ replicate (length msg) '=')
 testFile :: FilePath -> IO ()
 testFile file = do
     dump ("testing " ++ file ++ "...")
-    let jsFile = ("_make" </> file <.> ".hcr.js")
+    let jsFile = ("_make" </> dropExtension file <.> ".hcr.js")
     dump ("glomm " ++ jsFile)
     sysNoOut "./glomm" [jsFile, "-p", "-V"]
     dump ("    nodejs " ++ jsFile)

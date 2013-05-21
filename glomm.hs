@@ -3,7 +3,6 @@
 import Control.Arrow ((>>>))
 import Data.List
 import Data.Monoid
-import Data.Bifunctor
 import Data.Maybe
 import Control.Monad (when)
 import Safe
@@ -71,29 +70,30 @@ main = shakeArgs shakeOptions{
             ghcOptions ++
             []
 
-    "_make//*hs.hcr.js" *> \ jsFile -> do
+    "_make//*.hcr.js" *> \ jsFile -> do
+        hsFile <- searchHaskellFile False $
+            dropDirectory1 $ dropExtension $ dropExtension jsFile
         need ["pre.js", "ghcPrim.js", "post.js"]
-        neededPackages <- 
+        neededPackages <-
             map (\ f -> "packageDB" </> f <.> "package.js.opt") <$>
             readFileLines "packages"
         need neededPackages
-        transitive <- transitiveImports $ dropExtension $ dropExtension jsFile
+        transitive <- transitiveImports ("_make" </> hsFile)
         let coreFile = dropExtension jsFile
             importCoreFiles =
-                map (\ f -> "_make" </> f <.> ".hcr") transitive
+                map (\ f -> "_make" </> replaceExtension f ".hcr") transitive
         need (coreFile : importCoreFiles)
         liftIO $ putStrLn ("compiling " ++ show (coreFile : importCoreFiles))
         liftIO $ compileFiles (MainModule coreFile importCoreFiles neededPackages) jsFile
 
-    "_make//*hs.transitiveImports" *> \ importsFile -> do
-        let hsFile = dropDirectory1 $ dropExtension importsFile
+    "_make//*.transitiveImports" *> \ importsFile -> do
         direct :: [FilePath] <-
-            directImports hsFile
+            directImports (dropExtension importsFile)
         transitive :: [FilePath] <-
             concat <$>
-            mapM transitiveImports direct
-        error "transitive"
---         liftIO $ writeFile importsFile $ show (mconcat (directDeps : transitiveDeps))
+            mapM transitiveImports
+            (map ("_make" </>) direct)
+        liftIO $ writeFile importsFile $ unlines $ nub (direct ++ transitive)
 
     -- use ghc -M to generate file of direct dependencies
     "_make//*.directImports" *> \ importsFile -> do
@@ -195,8 +195,7 @@ directImports file =
     readFileLines (file <.> "directImports")
 
 transitiveImports :: FilePath -> Action [FilePath]
-transitiveImports file = do
-    error "trans"
+transitiveImports file =
     readFileLines (file <.> "transitiveImports")
 
 parseImports :: FilePath -> FilePath -> String -> Action [FilePath]

@@ -17,7 +17,9 @@ import System.FilePath (takeDirectory)
 import System.Directory (
     createDirectoryIfMissing,
     getCurrentDirectory,
-    canonicalizePath)
+    canonicalizePath,
+    renameFile,
+    removeFile)
 
 import Translate hiding (imports)
 
@@ -47,11 +49,9 @@ main = shakeArgs shakeOptions{
             "-package" : "base" :
             ghcOptions ++
             []
-        system' "rm" [replaceExtension hsFile ".s"]
-        system' "mv" $
-            (replaceExtension hsFile ".hcr") :
-            coreFile :
-            []
+        liftIO $ do
+            removeFile (replaceExtension hsFile ".s")
+            renameFile (replaceExtension hsFile ".hcr") coreFile
 
     "_make//*.hi-boot" *> \ hiBootFile -> do
         hsFile <- searchHaskellFile True $ dropDirectory1 $ dropExtension hiBootFile

@@ -60,7 +60,7 @@ function glExecuteJIO(jio) {
 
 function toWhnf(t) {
     while (typeof(t.value) == "undefined") {
-        t.toWhnff();
+        t.evalStep();
     };
 };
 
@@ -82,10 +82,10 @@ function glWhnfTerm(o) {
 // Returns a term that is a thunk.
 function glQuotedTerm(quoted) {
     var t = {
-        toWhnff: function () {
+        evalStep: function () {
             var result = quoted();
             this.value = result.value;
-            this.toWhnff = result.toWhnff;
+            this.evalStep = result.evalStep;
             this.toStr = result.toStr;
         },
         toStr: function () {
@@ -98,9 +98,9 @@ function glQuotedTerm(quoted) {
 // Returns a term that is an application of two terms.
 function glApplyTerm(f, x) {
     var t = {};
-    t.toWhnff = function () {
+    t.evalStep = function () {
         if (typeof(f.value) == "undefined") {
-            f.toWhnff();
+            f.evalStep();
             return;
         } else {
             if (f.value.isConstructed) {
@@ -112,7 +112,7 @@ function glApplyTerm(f, x) {
                 // beta reduction
                 var result = (f.value)(x)
                 this.value = result.value;
-                this.toWhnff = result.toWhnff;
+                this.evalStep = result.evalStep;
                 this.toStr = result.toStr;
             };
         };
@@ -127,14 +127,14 @@ function glApplyTerm(f, x) {
 // The rhs expects the scrutinee in whnf.
 function glCaseTerm (scrutinee, rhsFun) {
     var t = {};
-    t.toWhnff = function () {
+    t.evalStep = function () {
         if (typeof(scrutinee.value) == "undefined") {
-            scrutinee.toWhnff();
+            scrutinee.evalStep();
             return;
         } else {
             var result = rhsFun(scrutinee);
             this.value = result.value;
-            this.toWhnff = result.toWhnff;
+            this.evalStep = result.evalStep;
             this.toStr = result.toStr;
         };
     };

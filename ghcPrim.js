@@ -12,9 +12,9 @@ function toHsBool (b) {
 function primFunction1(f) {
     return glWhnfTerm(function (a) {
         var t = {};
-        t.toWhnff = function () {
+        t.evalStep = function () {
             if (typeof(a.value) == "undefined") {
-                a.toWhnff();
+                a.evalStep();
                 return;
             };
             this.value = f(a.value);
@@ -30,13 +30,13 @@ function primFunction2(f) {
     return glWhnfTerm(function (a) {
         return glWhnfTerm(function (b) {
             var t = {};
-            t.toWhnff = function () {
+            t.evalStep = function () {
                 if (typeof(a.value) == "undefined") {
-                    a.toWhnff();
+                    a.evalStep();
                     return;
                 };
                 if (typeof(b.value) == "undefined") {
-                    b.toWhnff();
+                    b.evalStep();
                     return;
                 };
                 this.value = f(a.value, b.value);
@@ -54,17 +54,17 @@ function primFunction3(f) {
         return glWhnfTerm(function (b) {
             return glWhnfTerm(function (c) {
                 var t = {};
-                t.toWhnff = function () {
+                t.evalStep = function () {
                     if (typeof(a.value) == "undefined") {
-                        a.toWhnff();
+                        a.evalStep();
                         return;
                     };
                     if (typeof(b.value) == "undefined") {
-                        b.toWhnff();
+                        b.evalStep();
                         return;
                     };
                     if (typeof(c.value) == "undefined") {
-                        c.toWhnff();
+                        c.evalStep();
                         return;
                     };
                     this.value = f(a.value, b.value, c.value);

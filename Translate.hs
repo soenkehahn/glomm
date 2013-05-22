@@ -284,7 +284,6 @@ coreLitToJS x typ = error $ show ("coreLit", x, typ, cons x)
 
 integerToJSTerm :: Integer -> JSA Term
 integerToJSTerm n = do
-    comment "hier"
     let unpackString = object "ghczmprim.g_ghczmprim_GHC_CString_unpackCStringzh"
     addr <- whnf (object (printf "\"%s\"" (show n)))
     string :: JSObject <- apply (cast $ object "glApplyTerm") (unpackString, addr)

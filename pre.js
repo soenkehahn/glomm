@@ -36,7 +36,7 @@ function glExecuteMain(c) {
 };
 
 function glExecuteJIO(outerCommand) {
-    realWorld = {value: hsUnit()};
+    realWorld = {value: hsUnit};
     function exec(command, realWorld) {
         toWhnf(command);
         if (command.value.glConsName == "JIOBind") {
@@ -223,7 +223,7 @@ function toJIO1(f){
 jPrim = {
     jputStrLn: function (msg, realWorld) {
         console.log(msg);
-        return toHsTuple2(hsUnit(), realWorld);
+        return toHsTuple2(hsUnit, realWorld);
     },
     alert: toJIO1(function (msg) {
         if (typeof(alert) == "undefined") {

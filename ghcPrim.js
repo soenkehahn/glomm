@@ -16,9 +16,7 @@ function toHsTuple2 (a, b) {
     return t;
 };
 
-function hsUnit () {
-    return glConsValue("Z0T");
-};
+var hsUnit = glConsValue("Z0T");
 
 function primFunction1(f) {
     return glWhnfTerm(function (a) {

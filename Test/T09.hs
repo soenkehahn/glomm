@@ -8,4 +8,4 @@ import JPrelude
 
 main :: JIO ()
 main = do
-    consoleLog "hurra"
+    jputStrLn "hurra"

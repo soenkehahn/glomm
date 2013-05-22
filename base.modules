@@ -2,7 +2,7 @@
 #Data/Either
 Data/String
 #Foreign/C/Types
-#GHC/Base
+GHC/Base
 #GHC/Exception
 #GHC/List
 #Data/Maybe

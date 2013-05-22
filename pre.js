@@ -29,8 +29,23 @@ function cloneConsValue(consValue) {
 function glExecuteMain(c) {
     toWhnf(c);
     if (c.value.glConsName == "JIO") {
-        return glExecuteJIO(c);
+        glExecuteJIO(c);
+    } else {
+        console.log(glShowMain(c));
     };
+};
+
+function glExecuteJIO(jio) {
+    realWorld = {value: hsUnit()};
+    toWhnf(jio);
+    stateFunction = jio.value.glConsArgs[0];
+    toWhnf(stateFunction);
+    result = glApplyTerm(stateFunction, realWorld);
+    toWhnf(result);
+};
+
+function glShowMain(c) {
+    toWhnf(c);
     if (typeof c.value == "number") {
         return ("Prim: " + c.value);
     };
@@ -43,19 +58,9 @@ function glExecuteMain(c) {
     };
     var r = c.value.glConsName;
     for (var i in c.value.glConsArgs) {
-        r += " @ (" + glExecuteMain(c.value.glConsArgs[i]) + ")"; 
+        r += " @ (" + glShowMain(c.value.glConsArgs[i]) + ")"; 
     };
     return r;
-};
-
-function glExecuteJIO(jio) {
-    realWorld = {value: 42};
-    toWhnf(jio);
-    stateFunction = jio.value.glConsArgs[0];
-    toWhnf(stateFunction);
-    result = glApplyTerm(stateFunction, realWorld);
-    toWhnf(result);
-    return result.value[0];
 };
 
 function toWhnf(t) {
@@ -153,4 +158,65 @@ function assertNotNull (a, identifier) {
         throw ("identifier not defined: " + identifier);
     };
     return a;
+};
+
+
+// JPrim
+
+stringToAddr = function (value) {
+    // value :: String in whnf
+    var result = "";
+    while (value.glConsName == "ZC") {
+        element = value.glConsArgs[0];
+        toWhnf(element);
+        result += String.fromCharCode(element.value.glConsArgs[0].value);
+        tail = value.glConsArgs[1];
+        toWhnf(tail);
+        value = tail.value;
+    };
+    return result;
+};
+
+jPrimTerms = {
+    error: primFunction1(function (msg) {
+        throw "error: " + stringToAddr(msg);
+    }),
+    patError: primFunction1(function (x) {
+        throw "patError nyi";
+    }),
+    ffi1: primFunction2(function (s, arg) {
+        fun = eval(stringToAddr(s));
+        if (typeof(fun) == "undefined") {
+            throw "does not exist: " + stringToAddr(s);
+        };
+        return fun(arg);
+    }),
+    ffi2: primFunction3(function (s, arg1, arg2) {
+        fun = eval(stringToAddr(s));
+        if (typeof(fun) == "undefined") {
+            throw "does not exist: " + stringToAddr(s);
+        };
+        return fun(arg1, arg2);
+    }),
+};
+
+function toJIO1(f){
+    return function (arg1, realWorld) {
+        r = f(arg1);
+        return toHsTuple2(r, realWorld);
+    };
+};
+
+jPrim = {
+    jputStrLn: function (msg, realWorld) {
+        console.log(msg);
+        return toHsTuple2(hsUnit(), realWorld);
+    },
+    alert: toJIO1(function (msg) {
+        if (typeof(alert) == "undefined") {
+            console.log("alert: " + msg);
+        } else {
+            alert(msg);
+        };
+    }),
 };

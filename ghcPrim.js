@@ -9,6 +9,17 @@ function toHsBool (b) {
     };
 };
 
+function toHsTuple2 (a, b) {
+    t = glConsValue("Z2T");
+    t.glConsArgs[0] = glWhnfTerm(a);
+    t.glConsArgs[1] = glWhnfTerm(b);
+    return t;
+};
+
+function hsUnit () {
+    return glConsValue("Z0T");
+};
+
 function primFunction1(f) {
     return glWhnfTerm(function (a) {
         var t = {};
@@ -210,48 +221,3 @@ f = function (a, b) {
 ghczmprim.g_ghczmprim_GHC_Prim_orzh = primFunction2(f);
 
 */
-// JPrim
-
-stringToAddr = function (value) {
-    // value :: String in whnf
-    var result = "";
-    while (value.glConsName == "ZC") {
-        element = value.glConsArgs[0];
-        toWhnf(element);
-        result += String.fromCharCode(element.value.glConsArgs[0].value);
-        tail = value.glConsArgs[1];
-        toWhnf(tail);
-        value = tail.value;
-    };
-    return result;
-};
-
-jPrimTerms = {
-    error: primFunction1(function (msg) {
-        throw "error: " + stringToAddr(msg);
-    }),
-    patError: primFunction1(function (x) {
-        throw "patError nyi";
-    }),
-    ffi1: primFunction2(function (s, arg) {
-        fun = eval(stringToAddr(s));
-        if (typeof(fun) == "undefined") {
-            throw "does not exist: " + stringToAddr(s);
-        };
-        return fun(arg);
-    }),
-    ffi2: primFunction3(function (s, arg1, arg2) {
-        fun = eval(stringToAddr(s));
-        if (typeof(fun) == "undefined") {
-            throw "does not exist: " + stringToAddr(s);
-        };
-        return fun(arg1, arg2);
-    }),
-};
-
-jPrim = {
-    consoleLog: function (msg, realWorld) {
-        console.log(msg);
-        return [null, realWorld];
-    },
-};

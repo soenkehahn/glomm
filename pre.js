@@ -26,8 +26,11 @@ function cloneConsValue(consValue) {
 
 
 // this is a bit magical atm. When we have a good idea how the entry point is typed, this can be implemented better.
-function glShowConsTerm(c) {
+function glExecuteMain(c) {
     toWhnf(c);
+    if (c.value.glConsName == "JIO") {
+        return glExecuteJIO(c);
+    };
     if (typeof c.value == "number") {
         return ("Prim: " + c.value);
     };
@@ -35,13 +38,24 @@ function glShowConsTerm(c) {
         return ("Prim: " + c.value);
     };
     if (typeof c.value.glConsName == "undefined") {
-        throw "name undefined: " + c.value + " " + typeof(c.value);
+        console.log ("name undefined");
+        return c.toStr();
     };
     var r = c.value.glConsName;
     for (var i in c.value.glConsArgs) {
-        r += " @ (" + glShowConsTerm(c.value.glConsArgs[i]) + ")"; 
+        r += " @ (" + glExecuteMain(c.value.glConsArgs[i]) + ")"; 
     };
     return r;
+};
+
+function glExecuteJIO(jio) {
+    realWorld = {value: 42};
+    toWhnf(jio);
+    stateFunction = jio.value.glConsArgs[0];
+    toWhnf(stateFunction);
+    result = glApplyTerm(stateFunction, realWorld);
+    toWhnf(result);
+    return result.value[0];
 };
 
 function toWhnf(t) {

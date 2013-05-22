@@ -47,6 +47,7 @@ main = shakeArgs shakeOptions{
             "-i_make" :
             "-hide-all-packages" :
             "-package" : "base" :
+            "-package" : "ghc-prim" :
             ghcOptions ++
             []
         liftIO $ do

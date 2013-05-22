@@ -19,7 +19,7 @@ import Data.Default
 import Data.Foldable
 import Data.List (intercalate, isPrefixOf)
 import Data.List (sortBy)
-import Data.Map as Map (Map, insert, lookup, keys, (!), fromList)
+import Data.Map as Map (Map, insert, lookup, keys, (!), fromList, member)
 import Data.Maybe
 import Data.Monoid
 import Data.Ratio
@@ -82,8 +82,8 @@ toJS modules@(MainModule mainModule imports packages) = do
         entryPoint = (Just anName, "main")
     (pre, ghcPrim, post) <- rts
     jsCode <- sunroofCompileJSA def "main" $ do
-        c <- emptyContext
-        (topLevelContext, moduleArray) :: (Context, JSObject) <- letContext (Core.Rec $ flattenBinds vdefgs) c
+        (topLevelContext, moduleArray) :: (Context, JSObject) <-
+            letContext (Core.Rec $ flattenBinds vdefgs) mempty
         return moduleArray
     packageCode <-
         concat <$>
@@ -100,19 +100,19 @@ toJS (Package package modules) = do
         vdefgs = mconcat $ fmap getVdefs (toList modules)
     jsCode <- sunroofCompileJSA def (zEncodeString package) $ do
         comment ("package: " ++ package)
-        c <- emptyContext
-        (topLevelContext, moduleArray) :: (Context, JSObject) <- letContext (Core.Rec $ flattenBinds vdefgs) c
+        (topLevelContext, moduleArray) :: (Context, JSObject) <-
+            letContext (Core.Rec $ flattenBinds vdefgs) mempty
         return moduleArray
     return jsCode
 
-emptyContext :: JSA Context
-emptyContext = do
-    patError <- whnf $ object "patError"
-    let patErrorName = (Just (M (P "base", ["Control", "Exception"], "Base")), "patError")
-    return $ Map.fromList $
-        (patErrorName, patError) :
-        []
-
+builtIns :: Context
+builtIns =
+    Map.fromList $ map (\ (n, jsName) -> (n, object jsName)) (
+        ((Just (M (P "base", ["Control", "Exception"], "Base")), "patError"), "jPrimTerms.patError") :
+        ((Just (M (P "base", ["GHC"], "Err")), "error"), "jPrimTerms.error") :
+        ((Just (M (P "main", [], "JPrelude")), "ffi1"), "jPrimTerms.ffi1") :
+        ((Just (M (P "main", [], "JPrelude")), "ffi2"), "jPrimTerms.ffi2") :
+        [])
 
 type QName = Qual Var
 
@@ -183,7 +183,11 @@ generateTerm (App f x) context = do
     fun <- generateTerm f context
     arg <- generateTerm x context
     apply (cast $ object "glApplyTerm") (fun, arg)
-generateTerm (Core.Var qname) context =
+generateTerm (Core.Var qname) _ | qname `member` builtIns = do
+    comment ("builtin")
+    return (builtIns Map.! qname)
+generateTerm (Core.Var qname) context = do
+    comment (show qname)
     maybe
         (do
             comment ("not in package scope: " ++ show qname)

@@ -1,9 +1,10 @@
-{-# language MagicHash #-}
+{-# language OverloadedStrings #-}
 
 module Test.T08 (main) where
 
 
-main :: String
-main = "huhu" -- if bigger 10 "huhu" then error "bug" else "huhu"
+import JPrelude
 
--- ~ bigger n (a : r) = if n <= 0 then True else bigger (pred n) r
+
+main :: JString
+main = "huhu"

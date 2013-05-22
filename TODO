@@ -1,0 +1,6 @@
+remove things from ghcPrim
+hsUnit as value
+tests for stack overflow when looping in JIO
+test for laziness of results from JIO
+remove RealWorld? (simplifies JIO-ffi)
+sort code

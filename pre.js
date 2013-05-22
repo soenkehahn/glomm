@@ -28,20 +28,32 @@ function cloneConsValue(consValue) {
 // this is a bit magical atm. When we have a good idea how the entry point is typed, this can be implemented better.
 function glExecuteMain(c) {
     toWhnf(c);
-    if (c.value.glConsName == "JIO") {
+    if (c.value.glConsName == "JIO" || c.value.glConsName == "JIOBind") {
         glExecuteJIO(c);
     } else {
         console.log(glShowMain(c));
     };
 };
 
-function glExecuteJIO(jio) {
+function glExecuteJIO(outerCommand) {
     realWorld = {value: hsUnit()};
-    toWhnf(jio);
-    stateFunction = jio.value.glConsArgs[0];
-    toWhnf(stateFunction);
-    result = glApplyTerm(stateFunction, realWorld);
-    toWhnf(result);
+    function exec(command, realWorld) {
+        toWhnf(command);
+        if (command.value.glConsName == "JIOBind") {
+            a = command.value.glConsArgs[0];
+            bf = command.value.glConsArgs[1];
+            x = exec(a, realWorld);
+            b = glApplyTerm(bf, x);
+            return exec(b, realWorld);
+        } else if (command.value.glConsName == "JIO") {
+            stateFunction = command.value.glConsArgs[0];
+            toWhnf(stateFunction);
+            result = glApplyTerm(stateFunction, realWorld);
+            toWhnf(result);
+            return result.value.glConsArgs[0];
+        };
+    };
+    exec(outerCommand, realWorld);
 };
 
 function glShowMain(c) {
@@ -179,7 +191,8 @@ stringToAddr = function (value) {
 
 jPrimTerms = {
     error: primFunction1(function (msg) {
-        throw "error: " + stringToAddr(msg);
+        console.log("error: " + stringToAddr(msg));
+        process.exit(1);
     }),
     patError: primFunction1(function (x) {
         throw "patError nyi";
@@ -219,4 +232,13 @@ jPrim = {
             alert(msg);
         };
     }),
+    prompt: toJIO1(function (msg) {
+        return prompt(msg);
+    }),
+    jstringEquals: function(a, b) {
+        return toHsBool(a == b);
+    },
+    jstringAppend: function(a, b) {
+        return a + b;
+    },
 };

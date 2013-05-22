@@ -1,5 +1,6 @@
 #Control/Monad
 #Data/Either
+#Data/Monoid
 Data/String
 #Foreign/C/Types
 GHC/Base

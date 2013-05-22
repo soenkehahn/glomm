@@ -37,7 +37,7 @@ testFile file = do
     dump ("glomm " ++ jsFile)
     sysNoOut "./glomm" [jsFile, "-p", "-V"]
     dump ("    nodejs " ++ jsFile)
-    output <- sys "nodejs" [jsFile]
+    output <- sysAllowError "nodejs" [jsFile]
     expected <- readFile (file <.> "exp")
     when (expected /= output) $
         error (file ++ "\n" ++ show expected ++ "\n    /=\n" ++ show output)
@@ -49,6 +49,13 @@ sys cmd options = do
     putStrLn err
     when (ec /= ExitSuccess) $ do
         error ("fail: " ++ show ec)
+    return output
+
+sysAllowError :: String -> [String] -> IO String
+sysAllowError cmd options = do
+    (ec, output, err) <- readProcessWithExitCode cmd options ""
+    putStrLn output
+    putStrLn err
     return output
 
 sysNoOut :: String -> [String] -> IO ()
